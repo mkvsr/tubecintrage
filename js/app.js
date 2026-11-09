@@ -397,6 +397,22 @@ const actions = {
 };
 document.querySelectorAll("[data-action]").forEach((b) => (b.onclick = () => actions[b.dataset.action]()));
 
+// Menu de la barre bleue plié / déplié : plus de place pour la vue 3D sur tablette.
+// Par défaut plié sur écran tactile ; le choix est retenu par appareil.
+const CLE_MENU = "tubecintrage.menuPlie";
+let menuPlie = null;
+try { menuPlie = JSON.parse(localStorage.getItem(CLE_MENU)); } catch { /* stockage indisponible */ }
+if (typeof menuPlie !== "boolean") menuPlie = matchMedia("(pointer: coarse)").matches;
+const appliquerMenu = () => {
+  document.body.classList.toggle("menu-plie", menuPlie);
+  $("#btMenu").setAttribute("aria-expanded", String(!menuPlie));
+};
+appliquerMenu();
+$("#btMenu").onclick = () => {
+  menuPlie = !menuPlie; appliquerMenu();
+  try { localStorage.setItem(CLE_MENU, JSON.stringify(menuPlie)); } catch { /* stockage indisponible */ }
+};
+
 async function appliquerParametres(m) {
   if (m._publier) {
     try { await At.publierParametres(m); toast("Paramètres publiés pour tout l'atelier (actifs d'ici 1 à 2 minutes)", 4000); }

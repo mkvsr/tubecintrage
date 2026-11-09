@@ -30,9 +30,17 @@ h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: v
 .actions button.primaire:hover { background: #ec9c45; }
 .actions i { display: inline-flex; width: 18px; height: 18px; font-style: normal; }
 .actions i svg { width: 18px; height: 18px; }
+/* bouton Menu : plie / déplie les boutons d'action */
+.bt-menu { display: flex; align-items: center; gap: 6px; min-height: var(--cible); padding: 0 12px; margin-left: auto;
+  border: 1px solid rgba(255,255,255,.35); border-radius: 6px; background: transparent; color: #fff; cursor: pointer; white-space: nowrap; }
+.bt-menu:hover { background: rgba(255,255,255,.14); }
+.bt-menu svg { width: 18px; height: 18px; transform: rotate(180deg); transition: transform .2s; }
+.bt-menu + .actions { margin-left: 0; }
+.menu-plie .bt-menu svg { transform: none; }
+.menu-plie .actions { display: none; }
 
 /* ---------- mise en page */
-.ecran { flex: 1; display: grid; grid-template-columns: minmax(380px, 470px) 1fr; gap: 10px; padding: 10px; min-height: 0; }
+.ecran { flex: 1; display: grid; grid-template-columns: minmax(340px, 410px) 1fr; gap: 10px; padding: 10px; min-height: 0; }
 .colonne { display: flex; flex-direction: column; gap: 10px; min-width: 0; min-height: 0; }
 .gauche { overflow: auto; }
 .carte { background: var(--carte); border-radius: var(--rayon); padding: 10px 12px; box-shadow: 0 1px 2px rgba(20,40,60,.08); }
@@ -180,6 +188,26 @@ table.edition { width: 100%; border-collapse: collapse; font-size: 13px; }
 .progression div { height: 100%; background: var(--accent); width: 0; transition: width .2s; }
 
 /* ---------- tablette et téléphone */
+/* tablette à l'horizontale : colonne de gauche plus étroite et plus compacte */
+@media (min-width: 901px) and (max-width: 1400px) {
+  .ecran { grid-template-columns: 340px 1fr; gap: 8px; padding: 8px; }
+  .colonne { gap: 8px; }
+  .carte { padding: 8px 10px; }
+  h2 { font-size: 12px; margin-bottom: 6px; }
+  .liste li { grid-template-columns: 20px 40px 1fr auto; padding: 4px 6px; font-size: 14px; }
+  .liste .nom small { font-size: 11px; }
+  .formulaire { gap: 6px 10px; }
+  .formulaire label { font-size: 11px; }
+  .formulaire input[type=number], .formulaire input[type=text], .formulaire select { font-size: 14px; }
+  .case { font-size: 13px !important; }
+  .resume { font-size: 13px; line-height: 1.35; margin-bottom: 6px; }
+  .resume .debit { font-size: 19px; }
+  .programme th { font-size: 10px; padding: 5px 2px; }
+  .programme td { font-size: 13px; padding: 6px 2px; }
+  .programme td.fort { font-size: 14px; }
+  .programme td.sens { font-size: 11px; }
+  .messages { font-size: 12px; }
+}
 @media (max-width: 1100px) {
   .actions button span { display: none; }
   .actions button.primaire span { display: inline; }
@@ -188,7 +216,7 @@ table.edition { width: 100%; border-collapse: collapse; font-size: 13px; }
   .ecran { display: flex; flex-direction: column; flex: none; }
   .colonne { min-height: auto; }
   .droite { order: -1; }
-  .vue3d { min-height: 52vh; flex: none; height: 52vh; }
+  .vue3d { min-height: 58vh; flex: none; height: 58vh; }
   .gauche { overflow: visible; }
   .liste { max-height: 40vh; }
   .barre { gap: 6px; }

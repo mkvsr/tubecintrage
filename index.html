@@ -18,7 +18,9 @@
 <header class="barre">
   <div class="marque"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 26V14a8 8 0 0 1 8-8h14" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round"/></svg>
     <span>TubeCintrage</span><small id="titreLot"></small></div>
-  <nav class="actions">
+  <button type="button" id="btMenu" class="bt-menu" aria-controls="menuActions" aria-expanded="true" title="Afficher ou masquer les boutons">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Menu</span></button>
+  <nav class="actions" id="menuActions">
     <div class="groupe">
       <button data-action="ouvrir" title="Remplacer le lot par des fichiers (Ctrl+O)"><i>📂</i><span>Ouvrir</span></button>
       <button data-action="ajouter" title="Ajouter des fichiers au lot"><i>➕</i><span>Ajouter</span></button>
