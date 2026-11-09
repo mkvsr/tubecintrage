@@ -87,11 +87,18 @@ export const peutPublier = () => { const c = config(); return !!(c.depot && c.je
 async function api(chemin, options = {}) {
   const c = config();
   if (!c.depot || !c.jeton) throw new ErreurAtelier("Publication non configurée (Paramètres > Publication)");
-  const r = await fetch(`https://api.github.com/repos/${c.depot}/${chemin}`, {
-    ...options,
-    headers: { Accept: "application/vnd.github+json", Authorization: `Bearer ${c.jeton}`, "X-GitHub-Api-Version": "2022-11-28", ...(options.headers || {}) },
-    cache: "no-store",
-  });
+  // Pas de « / » final quand chemin est vide : GitHub répond 404 au contrôle CORS de .../tubecintrage/
+  const url = `https://api.github.com/repos/${c.depot}` + (chemin ? `/${chemin}` : "");
+  let r;
+  try {
+    r = await fetch(url, {
+      ...options,
+      headers: { Accept: "application/vnd.github+json", Authorization: `Bearer ${c.jeton}`, "X-GitHub-Api-Version": "2022-11-28", ...(options.headers || {}) },
+      cache: "no-store",
+    });
+  } catch (e) {
+    throw new ErreurAtelier("GitHub injoignable (réseau, pare-feu ou extension du navigateur) : " + e.message);
+  }
   if (r.status === 401) throw new ErreurAtelier("Jeton GitHub refusé (expiré ou mal copié)");
   if (r.status === 403) throw new ErreurAtelier("Jeton GitHub sans le droit d'écrire dans ce dépôt (droit « Contents : Read and write » nécessaire)");
   return r;
