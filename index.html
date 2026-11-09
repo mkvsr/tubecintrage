@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1f3b57">
+<title>TubeCintrage</title>
+<link rel="icon" href="img/icone.svg" type="image/svg+xml">
+<link rel="stylesheet" href="css/app.css">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="img/icone-192.png">
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/three.module.min.js", "three/addons/": "./vendor/three/addons/" } }
+</script>
+<script src="vendor/jspdf.umd.min.js" defer></script>
+</head>
+<body>
+<header class="barre">
+  <div class="marque"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 26V14a8 8 0 0 1 8-8h14" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round"/></svg>
+    <span>TubeCintrage</span><small id="titreLot"></small></div>
+  <nav class="actions">
+    <div class="groupe">
+      <button data-action="ouvrir" title="Remplacer le lot par des fichiers (Ctrl+O)"><i>📂</i><span>Ouvrir</span></button>
+      <button data-action="ajouter" title="Ajouter des fichiers au lot"><i>➕</i><span>Ajouter</span></button>
+      <button data-action="lots" title="Lots enregistrés"><i>🗂</i><span>Lots</span></button>
+      <button data-action="enregistrer" title="Enregistrer le lot dans ce navigateur (Ctrl+S)"><i>💾</i><span>Enregistrer</span></button>
+      <button data-action="publier" title="Publier le lot pour les tablettes de l'atelier"><i>⬆</i><span>Publier</span></button>
+      <button data-action="points" title="Nouveau tube par points d'intersection"><i>📐</i><span>Par points</span></button>
+    </div>
+    <div class="groupe">
+      <button data-action="pdfTous" class="primaire" title="Dossier complet : débit, plan de coupe et toutes les fiches"><i>📄</i><span>Dossier PDF</span></button>
+      <button data-action="pdfTube" title="Fiche du tube sélectionné"><i>📃</i><span>Fiche du tube</span></button>
+      <button data-action="csv" title="Liste de débit pour Excel"><i>📊</i><span>Débit CSV</span></button>
+    </div>
+    <div class="groupe">
+      <button data-action="parametres" title="Paramètres machine"><i>⚙</i><span>Paramètres</span></button>
+      <button data-action="etalonnage" title="Étalonnage"><i>🎯</i><span>Étalonnage</span></button>
+    </div>
+  </nav>
+  <input type="file" id="fichiers" multiple accept=".json,.step,.stp,.csv,.txt,.tclot" hidden>
+</header>
+
+<main class="ecran">
+  <section class="colonne gauche">
+    <div class="carte" id="carteLot">
+      <div class="carte-titre"><h2>Tubes du lot</h2><span id="totalLot" class="discret"></span></div>
+      <ul id="liste" class="liste" tabindex="0"></ul>
+      <div class="vide" id="videLot">
+        <p><b>Glissez vos fichiers ici</b> ou utilisez <b>Ouvrir</b>.</p>
+        <p class="discret">Export de la macro SolidWorks (.json), STEP (.step/.stp), points (.csv/.txt) ou lot (.tclot).</p>
+        <p><button type="button" class="petit primaire" data-action="lots">Ouvrir un lot de l'atelier</button></p>
+      </div>
+      <div class="ligne-boutons">
+        <button data-action="retirer" class="petit">Retirer</button>
+        <button data-action="vider" class="petit">Vider</button>
+      </div>
+    </div>
+
+    <div class="carte" id="carteReglages">
+      <h2>Réglages du tube</h2>
+      <div class="formulaire">
+        <label>Quantité<input type="number" id="qte" min="0" max="9999" step="1" inputmode="numeric"></label>
+        <label>Diamètre<span class="unite"><input type="number" id="diam" min="5" max="200" step="0.1" inputmode="decimal">mm</span></label>
+        <label>Épaisseur<span class="unite"><input type="number" id="ep" min="0.3" max="20" step="0.1" inputmode="decimal">mm</span></label>
+        <label>Matière<input type="text" id="mat"></label>
+        <label class="large">Sens de passage
+          <select id="sens">
+            <option value="0">Automatique</option>
+            <option value="1">Début de l'esquisse en premier</option>
+            <option value="2">Fin de l'esquisse en premier</option>
+          </select></label>
+        <label class="large">Soudure
+          <span class="soudure"><label class="case"><input type="checkbox" id="soudAuto" checked> automatique</label>
+            <input type="range" id="soudAngle" min="0" max="359" step="1" disabled><output id="soudVal">—</output></span></label>
+      </div>
+    </div>
+
+    <div class="carte" id="carteResultat">
+      <h2>Résultat</h2>
+      <div id="resume" class="resume discret">Ouvrez un fichier pour commencer.</div>
+      <div class="table-defile">
+        <table class="programme" id="tableProg">
+          <thead><tr><th>Ligne</th><th>Y</th><th>B</th><th>Rotation</th><th>Angle</th><th>Comp.</th><th>Droite</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="carte" id="carteControles">
+      <h2>Contrôles</h2>
+      <ul id="messages" class="messages"></ul>
+    </div>
+  </section>
+
+  <section class="colonne droite">
+    <div class="vue-barre">
+      <div class="bascule" role="tablist">
+        <button id="btPiece" class="actif" role="tab">Pièce finie</button>
+        <button id="btSim" role="tab">Simulation machine</button>
+      </div>
+      <label class="case"><input type="checkbox" id="zones"> Zones de sécurité</label>
+      <button id="btRecentrer" class="petit">Recentrer</button>
+    </div>
+    <div id="vue3d" class="vue3d"><div id="attente3d" class="attente">Aucun tube</div></div>
+    <div id="afficheur" class="afficheur cache">
+      <div class="aff-titre" id="affTitre">—</div>
+      <div class="aff-cadrans">
+        <div class="cadran y"><span>Y</span><svg id="affY"></svg></div>
+        <div class="cadran b"><span>B</span><svg id="affB"></svg></div>
+        <div class="aff-info"><div><small>Angle</small><b id="affAngle">—</b></div><div><small>Comp.</small><b id="affComp">—</b></div></div>
+      </div>
+    </div>
+    <div id="lecteur" class="lecteur cache">
+      <button data-sim="pliPrec" title="Pli précédent">⏮</button>
+      <button data-sim="prec" title="Image précédente">◀</button>
+      <button data-sim="lecture" id="btLecture" class="primaire" title="Lecture / pause">▶</button>
+      <button data-sim="suiv" title="Image suivante">▶▏</button>
+      <button data-sim="pliSuiv" title="Pli suivant">⏭</button>
+      <input type="range" id="curseur" min="0" max="0" value="0">
+      <select id="vitesse" title="Vitesse"><option value="0.5">×0,5</option><option value="1" selected>×1</option><option value="2">×2</option><option value="4">×4</option></select>
+    </div>
+  </section>
+</main>
+
+<footer class="statut" id="statut"></footer>
+
+<div id="depot" class="depot"><div>Déposez les fichiers pour les ajouter au lot</div></div>
+<div id="toast" class="toast"></div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+{
+  "name": "TubeCintrage",
+  "short_name": "TubeCintrage",
+  "description": "Préparation du cintrage : débit, plan de coupe, programme machine et simulation",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#e9edf2",
+  "theme_color": "#1f3b57",
+  "lang": "fr",
+  "icons": [
+    { "src": "img/icone-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "img/icone-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "img/icone.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}
