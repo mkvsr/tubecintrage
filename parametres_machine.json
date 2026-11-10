@@ -1,0 +1,79 @@
+{
+ "nom": "Ercolina MG030 + banc mandrin 6 m",
+ "version": 4,
+ "longueur_max": 5890,
+ "decalage_zero": 2.2,
+ "decalage_verifie": true,
+ "sens_B": -1,
+ "sens_B_verifie": true,
+ "droite_arriere_mini": 390,
+ "droite_arriere_mesuree": true,
+ "hauteur_axe_sol": 1015,
+ "angle_max": 210,
+ "retour_max": 20,
+ "diametre_max": 60,
+ "rayon_max": 190,
+ "marge_collision": 20,
+ "obstacles_mesures": true,
+ "surlongueur_auto": true,
+ "position_soudure": "en haut (12 h), vue depuis le chariot",
+ "barre_longueur": 6000,
+ "trait_scie": 3,
+ "chute_reutilisable": 300,
+ "outils": [
+  {
+   "nom": "Ø48,3 R145",
+   "diametre": 48.3,
+   "rayon": 145,
+   "droite_mini": 150,
+   "pre_extraction": 5,
+   "vitesse": 100
+  }
+ ],
+ "etalonnages": [
+  {
+   "outil": "Ø48,3 R145",
+   "matiere": "*",
+   "retour_a": 3,
+   "retour_b": 0,
+   "coef_arc": 1,
+   "etalonne": false
+  }
+ ],
+ "obstacles": [
+  {
+   "nom": "Bâti machine",
+   "xmin": -6500,
+   "xmax": 130,
+   "ymin": -700,
+   "ymax": 235,
+   "zmin": -1200,
+   "zmax": -100,
+   "gravite": "erreur",
+   "actif": true
+  },
+  {
+   "nom": "Montant (réglage galet / mandrin)",
+   "xmin": -290,
+   "xmax": -190,
+   "ymin": 235,
+   "ymax": 395,
+   "zmin": -1200,
+   "zmax": -100,
+   "gravite": "erreur",
+   "actif": true
+  },
+  {
+   "nom": "Zone opérateur (pupitre)",
+   "xmin": -1500,
+   "xmax": 0,
+   "ymin": -3000,
+   "ymax": -800,
+   "zmin": -1000,
+   "zmax": 1200,
+   "gravite": "alerte",
+   "actif": true
+  }
+ ],
+ "publie": "2026-11-10T07:16:26.421Z"
+}
