@@ -8,7 +8,7 @@ import { MG030 } from "./modele_mg030.js";
 
 export const COULEURS = {
   droit: 0xbcc3cb, cintre: 0xffc400, cintreFait: 0x3b7dd8, enCours: 0xffc400, collision: 0xff1a1a,
-  surlong: 0xc9b8ff, soudure: 0xff1a1a, machine: 0x9db3cf, chariot: 0xffd000, sol: 0xcfd5dc,
+  surlong: 0xc9b8ff, soudure: 0xff1a1a, machine: 0x9db3cf, chariot: 0x1c1d1f, boutonY: 0xffd000, boutonB: 0xe8141a, sol: 0xcfd5dc,
   zone: 0x7fbf7f, operateur: 0x5b8c5a, matrice: 0x5d6d7e, reglette: 0x7b8a99,
 };
 const PARTIE = [COULEURS.cintreFait, COULEURS.enCours, COULEURS.droit, COULEURS.collision];
@@ -149,6 +149,69 @@ const rayonOutil = (prog) => (prog.etapes.length ? prog.etapes[0].rayon : (prog.
 /** L'outil et le contre-pli du modèle ne valent que pour l'outil réel (Ø48,3 R145) ; sinon formes simplifiées. */
 const outilDuModele = (prog) => Math.abs(rayonOutil(prog) - MG030.rayonOutil) < 1 && Math.abs(prog.tube.diametre - 48.3) < 1;
 
+// Afficheur 7 segments (même dessin que l'afficheur de la page, js/app.js « sept »), sur un canevas
+const SEG7 = { "0": "abcdef", "1": "bc", "2": "abged", "3": "abgcd", "4": "fgbc", "5": "afgcd", "6": "afgedc", "7": "abc", "8": "abcdefg", "9": "abcdfg", "-": "g", " ": "" };
+function septSegments(x, texte, nb, ox, oy, s) {
+  const h = 40, w = 21, pas = 29, inc = 4;
+  const [ent, dec = ""] = texte.replace(",", ".").split(".");
+  const chiffres = (ent + dec).padStart(nb, " ").slice(-nb), point = nb - dec.length - 1;
+  const P = (x0, u, v) => [ox + (x0 + u * w + (1 - v) * inc) * s, oy + (2 + v * h) * s];
+  const seg = { a: [[0.14, 0], [0.86, 0]], b: [[1, 0.08], [1, 0.44]], c: [[1, 0.56], [1, 0.92]], d: [[0.14, 1], [0.86, 1]],
+    e: [[0, 0.56], [0, 0.92]], f: [[0, 0.08], [0, 0.44]], g: [[0.14, 0.5], [0.86, 0.5]] };
+  x.lineWidth = 4.6 * s; x.lineCap = "round";
+  for (let k = 0; k < nb; k++) {
+    const x0 = 4 + k * pas, on = SEG7[chiffres[k]] ?? "";
+    for (const [n, [[u0, v0], [u1, v1]]] of Object.entries(seg)) {
+      const [x1, y1] = P(x0, u0, v0), [x2, y2] = P(x0, u1, v1);
+      x.strokeStyle = on.includes(n) ? "#ff2a1a" : "#2a0805";
+      x.beginPath(); x.moveTo(x1, y1); x.lineTo(x2, y2); x.stroke();
+    }
+    if (dec && k === point) { const [cx, cy] = P(x0 + 4, 1, 1); x.fillStyle = "#ff2a1a"; x.beginPath(); x.arc(cx, cy, 2.6 * s, 0, 7); x.fill(); }
+  }
+}
+const f1 = (v) => (Math.abs(v) < 0.05 ? 0 : Number(v)).toFixed(1).replace(".", ",");
+
+/** Écran du chariot : Y (avance) et B (rotation affichée), comme la commande. */
+function ecranChariot(Y, B) {
+  const e = MG030.ecran, W = 512, H = Math.round((W * (e.z1 - e.z0)) / (e.y1 - e.y0));
+  const c = document.createElement("canvas"); c.width = W; c.height = H;
+  const x = c.getContext("2d");
+  x.fillStyle = "#050607"; x.fillRect(0, 0, W, H);
+  const s = 2.1, ligne = (H - 30) / 2;
+  [["Y", "#f2c14e", f1(Y), 6], ["B", "#d62728", f1(B), 4]].forEach(([nom, coul, texte, nb], k) => {
+    const y0 = 12 + k * (ligne + 6), hc = 45 * s;
+    x.fillStyle = coul; x.fillRect(14, y0 + (ligne - hc) / 2, 62, hc);
+    x.fillStyle = "#000"; x.font = `bold ${Math.round(hc * 0.62)}px sans-serif`; x.textAlign = "center"; x.textBaseline = "middle";
+    x.fillText(nom, 45, y0 + ligne / 2);
+    x.strokeStyle = coul; x.lineWidth = 4; x.strokeRect(14, y0 + (ligne - hc) / 2, W - 28, hc);
+    septSegments(x, texte, nb, 92, y0 + (ligne - hc) / 2 + 2, s);
+  });
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  // quadrilatère tourné vers +X (vers l'outil), largeur selon +Y, hauteur selon +Z
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute([e.x, e.y0, e.z0, e.x, e.y1, e.z0, e.x, e.y1, e.z1, e.x, e.y0, e.z1], 3));
+  g.setAttribute("uv", new THREE.Float32BufferAttribute([0, 0, 1, 0, 1, 1, 0, 1], 2));
+  g.setIndex([0, 1, 2, 0, 2, 3]);
+  return new THREE.Mesh(g, new THREE.MeshBasicMaterial({ map: t }));
+}
+
+/** Chariot : corps noir, bouton Y jaune, bouton B rouge, écran Y / B (si `ecran` = {Y, B}). */
+function chariotModele(ecran) {
+  const g = geometrieModele("chariot");
+  const coul = [];   // [premier triangle, dernier, matériau]
+  for (const [a, b] of MG030.boutons.Y) coul.push([a, b, 1]);
+  for (const [a, b] of MG030.boutons.B) coul.push([a, b, 2]);
+  coul.sort((u, v) => u[0] - v[0]);
+  let t = 0;
+  const nTri = g.index.count / 3;
+  for (const [a, b, m] of coul) { if (a > t) g.addGroup(3 * t, 3 * (a - t), 0); g.addGroup(3 * a, 3 * (b - a + 1), m); t = b + 1; }
+  if (t < nTri) g.addGroup(3 * t, 3 * (nTri - t), 0);
+  const chariot = new THREE.Mesh(g, [matCouleur(COULEURS.chariot, { metalness: 0.3, roughness: 0.5 }),
+    matCouleur(COULEURS.boutonY, { roughness: 0.4 }), matCouleur(COULEURS.boutonB, { roughness: 0.4 })]);
+  if (ecran) chariot.add(ecranChariot(ecran.Y, ecran.B));
+  return chariot;
+}
+
 /** Outil et contre-pli dans leur position pour un angle de pli (°) en cours ; groupe vide si outil non modélisé. */
 function piecesMobiles(prog, angle = 0) {
   const groupe = new THREE.Group();
@@ -210,7 +273,7 @@ export function construireMachine(prog, { zones = false, operateur = true } = {}
 
 /** Tube, chariot, outil et contre-pli pour une image de la simulation.
  *  `coupe` : raccourcit la partie droite côté chariot (vignettes). `angle` : angle de pli en cours (°), 0 hors cintrage. */
-export function construireEtat(prog, etat, collisions = [], { coupe = null, angle = 0 } = {}) {
+export function construireEtat(prog, etat, collisions = [], { coupe = null, angle = 0, ecran = null } = {}) {
   const groupe = new THREE.Group();
   const D = prog.tube.diametre;
   const partie = etat.partie.slice();
@@ -228,7 +291,7 @@ export function construireEtat(prog, etat, collisions = [], { coupe = null, angl
   groupe.add(ligneSoudure(pts, sv, D / 2));
   if (coupeX == null) {
     // chariot du modèle, dessiné reculé (face avant en xAvantChariot) : on amène sa face avant sur la pince
-    const chariot = corpsModele("chariot", matCouleur(COULEURS.chariot));
+    const chariot = chariotModele(ecran);
     chariot.position.x = etat.xArriere + 15 - MG030.xAvantChariot;
     groupe.add(chariot);
   }
@@ -438,7 +501,10 @@ export class Vue3D {
   vider(groupe) {
     for (const o of [...groupe.children]) {
       groupe.remove(o);
-      o.traverse((x) => { if (x.geometry) x.geometry.dispose(); if (x.material) x.material.dispose?.(); });
+      o.traverse((x) => {
+        if (x.geometry) x.geometry.dispose();
+        for (const m of [x.material].flat()) if (m) { m.map?.dispose(); m.dispose?.(); }   // textures (écran du chariot) comprises
+      });
     }
   }
 
@@ -527,7 +593,7 @@ export class Vue3D {
 
   image(im, collisions = []) {
     this.vider(this.dyn);
-    this.dyn.add(construireEtat(this.prog, im.etat, collisions, { angle: im.phase === "cintrage" ? im.angleEnCours || 0 : 0 }).groupe);
+    this.dyn.add(construireEtat(this.prog, im.etat, collisions, { angle: im.phase === "cintrage" ? im.angleEnCours || 0 : 0, ecran: { Y: im.Y, B: affichageB(im.B) } }).groupe);
     this.demander();
   }
 
