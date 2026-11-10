@@ -221,7 +221,7 @@ function afficherResultats() {
 function modePiece() {
   etat.mode = "piece"; arreterLecture();
   $("#btPiece").classList.add("actif"); $("#btSim").classList.remove("actif");
-  $("#afficheur").classList.add("cache"); $("#lecteur").classList.add("cache");
+  $("#afficheur").classList.add("cache"); $("#lecteur").classList.add("cache"); $("#btZoom").classList.add("cache");
   if (etat.prog) vue.piece(etat.prog);
 }
 function modeSimulation() {
@@ -229,7 +229,7 @@ function modeSimulation() {
   const memeTube = vue.mode === "simulation" && vue.prog === etat.prog;
   etat.mode = "simulation";
   $("#btSim").classList.add("actif"); $("#btPiece").classList.remove("actif");
-  $("#afficheur").classList.remove("cache"); $("#lecteur").classList.remove("cache");
+  $("#afficheur").classList.remove("cache"); $("#lecteur").classList.remove("cache"); $("#btZoom").classList.remove("cache");
   if (!memeTube || modeSimulation._zones !== $("#zones").checked) {
     vue.preparerSimulation(etat.prog, $("#zones").checked);
     modeSimulation._zones = $("#zones").checked;
@@ -298,6 +298,7 @@ $("#btPiece").onclick = modePiece;
 $("#btSim").onclick = modeSimulation;
 $("#zones").onchange = () => { if (etat.mode === "simulation") modeSimulation(); };
 $("#btRecentrer").onclick = () => vue.recentrer();
+$("#btZoom").onclick = () => { if (vue.mode === "simulation") vue.vueZoom(); };
 $("#curseur").addEventListener("input", () => { arreterLecture(); afficherImage(Number($("#curseur").value)); });
 $("#vitesse").onchange = () => { if (etat.lecture) { arreterLecture(); lecture(); } };
 document.querySelectorAll("[data-sim]").forEach((b) => (b.onclick = () => {

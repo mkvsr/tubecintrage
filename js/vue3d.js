@@ -163,8 +163,10 @@ export function construireMachine(prog, { zones = false, operateur = true } = {}
     const mo = matCouleur(COULEURS.operateur, { transparent: true, opacity: 0.25, depthWrite: false });
     const corps = new THREE.Mesh(new THREE.CylinderGeometry(180, 180, 1700, 24), mo);
     corps.rotation.x = Math.PI / 2; corps.position.set(-650, -1150, -H + 850); groupe.add(corps);
+    corps.name = "operateur";
     const tete = new THREE.Mesh(new THREE.SphereGeometry(130, 24, 16), mo);
     tete.position.set(-650, -1150, -H + 1830); groupe.add(tete);
+    tete.name = "operateur";
   }
   return groupe;
 }
@@ -451,12 +453,28 @@ export class Vue3D {
     this.vueMachine();
   }
 
-  vueMachine() {
-    const cible = new THREE.Vector3(-250, 300, -300);
-    this.camera.position.copy(cible).add(new THREE.Vector3(-2550, -3650, 2550).multiplyScalar(1.2 * Math.pow(Math.max(1, 1.6 / this.camera.aspect), 0.85)));
+  _placer(oeil, cible, operateurVisible = true) {
+    // mannequin opérateur masqué quand la caméra est à sa place (il couvrirait le bas de l'image)
+    this.contenu.traverse((o) => { if (o.name === "operateur") o.visible = operateurVisible; });
+    this.camera.position.copy(oeil);
     this.controles.target.copy(cible);
     this.camera.near = 5; this.camera.far = 60000; this.camera.updateProjectionMatrix();
     this.controles.update(); this.demander();
+  }
+
+  /** Vue « Recentrer » : depuis la tête de l'opérateur au pupitre (mannequin de construireMachine), regard vers l'outil. */
+  vueMachine() {
+    const H = this.prog ? this.prog.machine.hauteur_axe_sol : 1015;
+    this._placer(new THREE.Vector3(-650, -1150, -H + 1830), new THREE.Vector3(0, 0, 0), false);
+  }
+
+  /** Vue « Zoom » : 400 mm au-dessus de l'outil, regard vers le bas, côté opérateur en bas de l'écran.
+   *  Centrée entre l'axe de la forme (y = R) et l'axe du tube (y = 0) : on voit la forme et le tube qui s'y enroule. */
+  vueZoom() {
+    const p = this.prog;
+    const R = p && p.etapes.length ? p.etapes[0].rayon : (p && p.outil ? p.outil.rayon : 150);
+    // œil décalé de 1 mm vers l'opérateur : évite la vue exactement verticale (indéterminée avec camera.up = Z)
+    this._placer(new THREE.Vector3(0, R / 2 - 1, 400), new THREE.Vector3(0, R / 2, 0));
   }
 
   recentrer() { if (this.mode === "piece") this.vuePiece(); else if (this.mode === "simulation") this.vueMachine(); }
