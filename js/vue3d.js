@@ -6,8 +6,8 @@ import { estCintre } from "./core/geometrie.js";
 import { affichageB } from "./core/sequence.js";
 
 export const COULEURS = {
-  droit: 0x9aa3ad, cintre: 0xe08a2e, cintreFait: 0x3b7dd8, enCours: 0xe08a2e, collision: 0xd62728,
-  surlong: 0xc9b8ff, soudure: 0xc0392b, machine: 0x9db3cf, chariot: 0xf2c14e, sol: 0xcfd5dc,
+  droit: 0xbcc3cb, cintre: 0xffc400, cintreFait: 0x3b7dd8, enCours: 0xffc400, collision: 0xff1a1a,
+  surlong: 0xc9b8ff, soudure: 0xff1a1a, machine: 0x9db3cf, chariot: 0xffd000, sol: 0xcfd5dc,
   zone: 0x7fbf7f, operateur: 0x5b8c5a, matrice: 0x5d6d7e, reglette: 0x7b8a99,
 };
 const PARTIE = [COULEURS.cintreFait, COULEURS.enCours, COULEURS.droit, COULEURS.collision];
@@ -84,15 +84,15 @@ function boite(xmin, xmax, ymin, ymax, zmin, zmax, materiau) {
 }
 
 function eclairer(scene) {
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x8a96a3, 1.6));
-  const d = new THREE.DirectionalLight(0xffffff, 1.6); d.position.set(-2, -3, 5); scene.add(d);
-  const d2 = new THREE.DirectionalLight(0xffffff, 0.6); d2.position.set(3, 2, 1); scene.add(d2);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x9aa5b1, 2.3));
+  const d = new THREE.DirectionalLight(0xffffff, 2.0); d.position.set(-2, -3, 5); scene.add(d);
+  const d2 = new THREE.DirectionalLight(0xffffff, 1.0); d2.position.set(3, 2, 1); scene.add(d2);
 }
 
 const ligneSoudure = (pts, vecs, r) => {
   const q = pts.map((p, k) => [p[0] + vecs[k][0] * (r + 0.4), p[1] + vecs[k][1] * (r + 0.4), p[2] + vecs[k][2] * (r + 0.4)]);
   const c = q.map(() => COULEURS.soudure);
-  return new THREE.Mesh(geometrieTube(q, Math.max(0.8, r * 0.07), c, 6), new THREE.MeshBasicMaterial({ color: COULEURS.soudure }));
+  return new THREE.Mesh(geometrieTube(q, Math.max(1.6, r * 0.14), c, 6), new THREE.MeshBasicMaterial({ color: COULEURS.soudure }));
 };
 
 // ----------------------------------------------------------------------
@@ -342,7 +342,7 @@ export function imageEtat(prog, etat, l = 900, h = 640) {
   const cam = cameraCadree(cadre, DIR_MACHINE, new THREE.Vector3(0, 0, 1), l / h, 0.12);
   const etiq = [];
   if (coupeX != null) etiq.push({ pos: [coupeX, 0, 0], texte: "→ chariot", type: "extremite" });
-  return versImage(rendu(l, h), scene, cam, l, h, 0xe9edf2, etiq, l / 900 * 1.2);
+  return versImage(rendu(l, h), scene, cam, l, h, 0xffffff, etiq, l / 900 * 1.2);
 }
 
 // ----------------------------------------------------------------------
@@ -376,7 +376,7 @@ export class Vue3D {
   _fond() {
     const c = document.createElement("canvas"); c.width = 2; c.height = 256;
     const x = c.getContext("2d"), g = x.createLinearGradient(0, 0, 0, 256);
-    g.addColorStop(0, "#f4f6f9"); g.addColorStop(1, "#d5dbe2");
+    g.addColorStop(0, "#ffffff"); g.addColorStop(1, "#ffffff");
     x.fillStyle = g; x.fillRect(0, 0, 2, 256);
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
     this.scene.background = t;

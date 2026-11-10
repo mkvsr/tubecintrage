@@ -114,7 +114,7 @@ table.programme { width: 100%; border-collapse: collapse; font-variant-numeric: 
 .bascule button:last-child { border-radius: 0 6px 6px 0; border-left: 0; }
 .bascule button.actif { background: var(--bleu); color: #fff; border-color: var(--bleu); }
 .vue-barre .case { margin-left: auto; }
-.vue3d { position: relative; flex: 1; min-height: 320px; border-radius: var(--rayon); overflow: hidden; background: #dfe4ea; touch-action: none; }
+.vue3d { position: relative; flex: 1; min-height: 320px; border-radius: var(--rayon); overflow: hidden; background: #ffffff; touch-action: none; }
 .vue3d canvas { display: block; }
 .attente { position: absolute; inset: 0; display: grid; place-items: center; color: var(--discret); font-size: 15px; }
 .etiquettes3d { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
