@@ -55,7 +55,7 @@ export function geometrieTube(pts, rayon, couleurs = null, cotes = 18, fermer = 
   const L = cotes + 1;
   for (let k = 0; k < n - 1; k++) for (let j = 0; j < cotes; j++) {
     const a = k * L + j, b = a + L;
-    idx.push(a, b, a + 1, b, b + 1, a + 1);
+    idx.push(a, a + 1, b, b, a + 1, b + 1); // sens direct vu de l'extérieur (sinon la face visible est masquée)
   }
   if (fermer) for (const [k, sgn] of [[0, -1], [n - 1, 1]]) {
     const c0 = pos.length / 3;
