@@ -183,7 +183,6 @@ function ecranChariot(Y, B) {
     x.fillStyle = coul; x.fillRect(14, y0 + (ligne - hc) / 2, 62, hc);
     x.fillStyle = "#000"; x.font = `bold ${Math.round(hc * 0.62)}px sans-serif`; x.textAlign = "center"; x.textBaseline = "middle";
     x.fillText(nom, 45, y0 + ligne / 2);
-    x.strokeStyle = coul; x.lineWidth = 4; x.strokeRect(14, y0 + (ligne - hc) / 2, W - 28, hc);
     septSegments(x, texte, nb, 92, y0 + (ligne - hc) / 2 + 2, s);
   });
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;

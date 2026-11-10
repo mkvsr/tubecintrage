@@ -8,6 +8,7 @@ import { imagePiece, imageEtat } from "./vue3d.js";
 const BLEU = "#1f3b57", GRIS = "#5d6d7e", CLAIR = "#eef2f6", ROUGE = "#b03a2e", JAUNE_TXT = "#9a6a00", TRAIT = "#c5ced8";
 const JAUNE = "#f2c14e", ROUGE_B = "#d62728";
 const L = 210, H = 297, MG = 15, LU = L - 2 * MG;
+const QR_TAILLE = 20, QR_RESERVE = 26;   // QR code d'accès à la simulation (page 1, en bas à droite), mm
 
 export const f1 = (v, n = 1) => (Math.abs(v) < 0.5 * 10 ** -n ? 0 : Number(v)).toFixed(n).replace(".", ",");
 const g = (x) => String(+Number(x).toPrecision(6)).replace(".", ",");
@@ -40,7 +41,7 @@ class Doc {
   }
   police(taille, gras = false, couleur = "#000000") { this.d.setFont("DV", gras ? "bold" : "normal"); this.d.setFontSize(taille); this.d.setTextColor(couleur); }
   nouvellePage() { this.d.addPage(); this.page++; this.y = 12; }
-  reste() { return H - 16 - this.y; }
+  reste() { return H - 16 - (this.page === 1 ? QR_RESERVE : 0) - this.y; }   // page 1 : place du QR code en bas
   besoin(h) { if (this.reste() < h) this.nouvellePage(); }
   texte(t, x, y, o = {}) { this.d.text(t, x, y, o); }
   /** Paragraphe avec retour à la ligne ; renvoie la hauteur. */
@@ -443,8 +444,24 @@ export async function dossierPdf(progs, { titreLot = "", progression = null } = 
     if (progs[k].etapes.length) pageSimulation(D, progs[k]);
     if (progression) await progression(k + 1, progs.length);
   }
+  await qrSimulation(D);
   D.pieds();
   return D.d.output("blob");
+}
+
+/** Page 1, en bas à droite : QR code vers le site (simulation), avec la légende au-dessus. */
+async function qrSimulation(D) {
+  let donnees;
+  try {
+    const buf = new Uint8Array(await (await fetch(new URL("../img/qr_simulation.png", import.meta.url))).arrayBuffer());
+    let s = ""; for (let i = 0; i < buf.length; i += 0x8000) s += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
+    donnees = "data:image/png;base64," + btoa(s);
+  } catch { return; }   // hors ligne sans copie en cache : dossier sans QR code
+  const x = L - MG - QR_TAILLE, y = H - 10 - QR_TAILLE;
+  D.d.setPage(1);
+  D.d.addImage(donnees, "PNG", x, y, QR_TAILLE, QR_TAILLE);
+  D.police(7, true, BLEU);
+  D.texte("Scanner pour accéder à la simulation", x + QR_TAILLE, y - 1, { align: "right" });
 }
 
 /** Liste de débit CSV (séparateur ;, UTF-8 avec BOM pour Excel). */
