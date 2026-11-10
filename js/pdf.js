@@ -9,7 +9,7 @@ import { gueulesDuTube, profilGueule, descriptionGueule } from "./core/gueule.js
 const BLEU = "#1f3b57", GRIS = "#5d6d7e", CLAIR = "#eef2f6", ROUGE = "#b03a2e", JAUNE_TXT = "#9a6a00", TRAIT = "#c5ced8";
 const JAUNE = "#f2c14e", ROUGE_B = "#d62728", ROSE = "#d6338a";
 const L = 210, H = 297, MG = 15, LU = L - 2 * MG;
-const QR_TAILLE = 24, QR_RESERVE = 34;   // QR code d'accès à la simulation (page 1, en bas à droite), mm
+const QR_TAILLE = 24, QR_Y = MG + 2;   // QR code d'accès à la simulation : page 1, en haut à droite, à côté du bandeau (mm)
 
 export const f1 = (v, n = 1) => (Math.abs(v) < 0.5 * 10 ** -n ? 0 : Number(v)).toFixed(n).replace(".", ",");
 const g = (x) => String(+Number(x).toPrecision(6)).replace(".", ",");
@@ -42,7 +42,7 @@ class Doc {
   }
   police(taille, gras = false, couleur = "#000000") { this.d.setFont("DV", gras ? "bold" : "normal"); this.d.setFontSize(taille); this.d.setTextColor(couleur); }
   nouvellePage() { this.d.addPage(); this.page++; this.y = 12; }
-  reste() { return H - 16 - (this.page === 1 ? QR_RESERVE : 0) - this.y; }   // page 1 : place du QR code en bas
+  reste() { return H - 16 - this.y; }
   besoin(h) { if (this.reste() < h) this.nouvellePage(); }
   texte(t, x, y, o = {}) { this.d.text(t, x, y, o); }
   /** Paragraphe avec retour à la ligne ; renvoie la hauteur. */
@@ -61,14 +61,20 @@ class Doc {
   }
   entete(titre, sous, soustitre2 = null) {
     const h = soustitre2 ? 21 : 16;
-    this.rect(MG, this.y, LU, h, BLEU);
+    // page 1 : bandeau raccourci, le QR code de la simulation est à sa droite (voir qrSimulation)
+    const p1 = this.page === 1, W = p1 ? LU - QR_TAILLE - 4 : LU;
+    this.rect(MG, this.y, W, h, BLEU);
     let tp = 14;
     this.police(tp, true, "#ffffff");
-    while (tp > 9 && this.d.getTextWidth(titre) > LU - 8) { tp -= 0.5; this.police(tp, true, "#ffffff"); }
+    while (tp > 9 && this.d.getTextWidth(titre) > W - 8) { tp -= 0.5; this.police(tp, true, "#ffffff"); }
     this.texte(titre, MG + 4, this.y + 6.5);
-    this.police(8.5, false, "#ffffff"); this.texte(sous, MG + 4, this.y + 12, { maxWidth: LU - 8 });
-    if (soustitre2) { this.police(7.5, false, "#dbe4ee"); this.texte(soustitre2, MG + 4, this.y + 17, { maxWidth: LU - 8 }); }
+    let ts = 8.5;
+    this.police(ts, false, "#ffffff");
+    while (ts > 6.5 && this.d.getTextWidth(sous) > W - 8) { ts -= 0.5; this.police(ts, false, "#ffffff"); }
+    this.texte(sous, MG + 4, this.y + 12, { maxWidth: W - 8 });
+    if (soustitre2) { this.police(7.5, false, "#dbe4ee"); this.texte(soustitre2, MG + 4, this.y + 17, { maxWidth: W - 8 }); }
     this.y += h + 4;
+    if (p1) this.y = Math.max(this.y, QR_Y + QR_TAILLE + 3);
   }
   titre2(t) { this.besoin(12); this.police(11, true, BLEU); this.texte(t, MG, this.y + 4); this.y += 7; }
   pieds() {
@@ -209,7 +215,7 @@ function dessinerPlan(D, m, barres, couleurs) {
   }
   let num = 1;
   for (const gr of groupes) {
-    D.besoin(hB + 9);
+    D.besoin(hB + 6);   // une rangée occupe 3,2 + 11 + 2,5 mm
     const b = gr.b, ech = wB / b.longueur, y = D.y + 3.2;
     // étiquette barre
     D.police(8.5, true, BLEU);
@@ -528,7 +534,7 @@ async function qrSimulation(D) {
     let s = ""; for (let i = 0; i < buf.length; i += 0x8000) s += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
     donnees = "data:image/png;base64," + btoa(s);
   } catch { return; }   // hors ligne sans copie en cache : dossier sans QR code
-  const x = L - MG - QR_TAILLE, y = H - 10 - QR_TAILLE;
+  const x = L - MG - QR_TAILLE, y = QR_Y;   // en haut à droite (le bandeau de la page 1 est raccourci)
   D.d.setPage(1);
   D.d.addImage(donnees, "PNG", x, y, QR_TAILLE, QR_TAILLE);
   // légende fine, centrée, coupée en lignes pour ne pas dépasser la largeur du QR code ; la dernière ligne touche le code
