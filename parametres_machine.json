@@ -68,12 +68,12 @@
    "xmin": -1500,
    "xmax": 120,
    "ymin": -3000,
-   "ymax": -800,
+   "ymax": -500,
    "zmin": -1000,
    "zmax": 1200,
    "gravite": "alerte",
    "actif": true
   }
  ],
- "publie": "2026-11-10T07:59:59.452Z"
+ "publie": "2026-11-10T08:38:33.753Z"
 }
