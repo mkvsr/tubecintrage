@@ -5,6 +5,7 @@ import { planDeCoupe } from "./core/debit.js";
 import { aVerifier } from "./core/parametres.js";
 import { imagePiece, imageEtat } from "./vue3d.js";
 import { gueulesDuTube, profilGueule, descriptionGueule } from "./core/gueule.js";
+import { qrMatrice } from "./qrcode.js";
 
 const BLEU = "#1f3b57", GRIS = "#5d6d7e", CLAIR = "#eef2f6", ROUGE = "#b03a2e", JAUNE_TXT = "#9a6a00", TRAIT = "#c5ced8";
 const JAUNE = "#f2c14e", ROUGE_B = "#d62728", ROSE = "#d6338a";
@@ -542,6 +543,54 @@ async function qrSimulation(D) {
   const lignes = D.d.splitTextToSize("Scanner pour accéder à la simulation", QR_TAILLE);
   const hl = 6 * 0.3528 * 1.2;
   lignes.forEach((l, k) => D.texte(l, x + QR_TAILLE / 2, y - 0.8 - (lignes.length - 1 - k) * hl, { align: "center" }));
+}
+
+// ----------------------------------------------------------------------
+// Étiquettes des pièces : planche A4 de 24 étiquettes 63,5 × 33,9 mm (3 × 8, type Avery L7159)
+const ETQ = { l: 63.5, h: 33.9, pasX: 66.0, pasY: 33.9, gauche: 7.2, haut: 13.1, col: 3, lig: 8 };
+
+/** pieces : [{repere, nom, longueur, teinte, i, n, url}] ; une étiquette par pièce.
+ *  debut : première étiquette libre de la planche (1 à 24), pour finir une planche entamée. */
+export async function etiquettesPdf(pieces, { lot = "", debut = 1 } = {}) {
+  const fontes = await polices();
+  const d = new window.jspdf.jsPDF({ unit: "mm", format: "a4", compress: true });
+  d.addFileToVFS("DV.ttf", fontes.n); d.addFont("DV.ttf", "DV", "normal");
+  d.addFileToVFS("DVB.ttf", fontes.b); d.addFont("DVB.ttf", "DV", "bold");
+  d.setProperties({ title: "Étiquettes " + lot, creator: "TubeCintrage" });
+  const police = (t, gras, c) => { d.setFont("DV", gras ? "bold" : "normal"); d.setFontSize(t); d.setTextColor(c); };
+  const parPage = ETQ.col * ETQ.lig;
+  let pos = Math.min(parPage, Math.max(1, debut)) - 1;
+  const qrCache = new Map();
+  for (const p of pieces) {
+    if (pos >= parPage) { d.addPage(); pos = 0; }
+    const ex = ETQ.gauche + (pos % ETQ.col) * ETQ.pasX, ey = ETQ.haut + Math.floor(pos / ETQ.col) * ETQ.pasY;
+    pos++;
+    // QR code (vectoriel, modules noirs regroupés par ligne)
+    const q = 24, qx = ex + 2.5, qy = ey + (ETQ.h - q) / 2;
+    if (!qrCache.has(p.url)) qrCache.set(p.url, qrMatrice(p.url, { ecc: "M" }));
+    const mat = qrCache.get(p.url), n = mat.length, mm = q / n;
+    d.setFillColor("#000000");
+    mat.forEach((ligne, y) => {
+      for (let x = 0; x < n; x++) if (ligne[x]) {
+        let x2 = x; while (x2 + 1 < n && ligne[x2 + 1]) x2++;
+        d.rect(qx + x * mm, qy + y * mm, (x2 - x + 1) * mm + 0.01, mm + 0.01, "F");
+        x = x2;
+      }
+    });
+    // texte à droite du QR code
+    const x0 = qx + q + 2.5, wt = ex + ETQ.l - 2.5 - x0;
+    police(17, true, "#10273d");
+    const wr = d.getTextWidth(p.repere) + 4;
+    d.setFillColor(TEINTES[p.teinte % TEINTES.length]); d.setDrawColor("#4a6b8a"); d.setLineWidth(0.3);
+    d.roundedRect(x0, ey + 3.2, wr, 9, 1.2, 1.2, "FD");
+    d.text(p.repere, x0 + 2, ey + 10.3);
+    if (p.n > 1) { police(6.5, false, GRIS); d.text(`pièce ${p.i}/${p.n}`, ex + ETQ.l - 2.5, ey + 6.2, { align: "right" }); }
+    police(8.5, true, "#000000");
+    d.splitTextToSize(p.nom || "", wt).slice(0, 2).forEach((l, k) => d.text(l, x0, ey + 16.6 + k * 3.5));
+    police(13, true, BLEU); d.text(`${f1(p.longueur)} mm`, x0, ey + 26.6);
+    police(6.5, false, GRIS); d.text(d.splitTextToSize(`Lot : ${lot || "—"}`, wt)[0], x0, ey + 31.2);
+  }
+  return d.output("blob");
 }
 
 /** Liste de débit CSV (séparateur ;, UTF-8 avec BOM pour Excel). */

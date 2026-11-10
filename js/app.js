@@ -17,7 +17,7 @@ const pause = () => new Promise((r) => setTimeout(r, 0));
 const ICONES = {
   ouvrir: "M3 7h6l2 2h10v10H3z", ajouter: "M12 5v14M5 12h14", lots: "M4 5h16v4H4zM4 11h16v4H4zM4 17h16v3H4z",
   enregistrer: "M5 4h11l3 3v13H5zM8 4v5h8V4M8 20v-6h8v6", publier: "M12 16V4M7 9l5-5 5 5M5 20h14", points: "M4 20 12 4l8 16M8 13h8",
-  pdfTous: "M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h7", pdfTube: "M6 3h9l4 4v14H6zM14 3v5h5", csv: "M4 4h16v16H4zM4 10h16M4 15h16M10 4v16",
+  pdfTous: "M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h7", pdfTube: "M6 3h9l4 4v14H6zM14 3v5h5", csv: "M4 4h16v16H4zM4 10h16M4 15h16M10 4v16", etiquettes: "M3 12V4h8l10 10-8 8zM7.5 8.5h.01",
   parametres: "M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1",
   etalonnage: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 11v2",
 };
@@ -382,6 +382,38 @@ const actions = {
     const t = etat.tubes[etat.courant]; if (!t) return toast("Aucun tube sélectionné");
     await exporterPdf([t], `${t.repere ? t.repere + " " : ""}${t.nom}`.replace(/[\\/:*?"<>|]+/g, "_") + ".pdf", "");
   },
+  async etiquettes() {
+    const tubes = etat.tubes.filter((t) => t.quantite > 0);
+    if (!tubes.length) return toast("Le lot est vide");
+    // id du lot publié (même nom) : le QR code ouvrira directement le tube ; sinon seulement l'application
+    let idLot = null;
+    try {
+      const mdp = At.motDePasse();
+      if (mdp && etat.nomLot) idLot = (await At.listerPublies(mdp)).find((l) => l.nom === etat.nomLot)?.id || null;
+    } catch { /* hors ligne ou pas de lot publié */ }
+    if (!idLot && !(await Dl.confirmer("Étiquettes",
+      `Le lot « ${etat.nomLot || "sans nom"} » n'est pas publié pour l'atelier : les QR codes ouvriront seulement l'application.\n\nPour qu'ils ouvrent directement le tube, publiez d'abord le lot (bouton Publier), puis refaites les étiquettes.`,
+      "Continuer quand même"))) return;
+    const nb = tubes.reduce((s, t) => s + t.quantite, 0);
+    const r = await Dl.demanderTexte("Étiquettes",
+      `${nb} étiquette(s) 63,5 × 33,9 mm, planche A4 de 24 (3 × 8).\nCommencer à l'étiquette n° (1 à 24, de gauche à droite puis de haut en bas) :`, "1");
+    if (r == null) return;
+    const debut = Math.min(24, Math.max(1, Math.round(Dl.nombre(r, 1))));
+    try {
+      const { etiquettesPdf } = await import("./pdf.js");
+      const base = location.origin + location.pathname.replace(/index\.html$/, "");
+      const pieces = [];
+      tubes.forEach((t, k) => {
+        const p = programme(t);
+        for (let i = 1; i <= t.quantite; i++)
+          pieces.push({ repere: t.repere, nom: t.nom, longueur: p.longueurDebit, teinte: k, i, n: t.quantite,
+            url: base + (idLot ? `?l=${encodeURIComponent(idLot)}&r=${encodeURIComponent(t.repere)}` : "") });
+      });
+      const blob = await etiquettesPdf(pieces, { lot: etat.nomLot || "", debut });
+      St.telecharger(`Etiquettes ${etat.nomLot || "lot"}.pdf`.replace(/[\\/:*?"<>|]+/g, "_"), blob, "application/pdf");
+      toast(`${pieces.length} étiquette(s) créée(s)`, 3000);
+    } catch (e) { console.error(e); Dl.message("Étiquettes", "Échec : " + e.message); }
+  },
   async csv() {
     if (!etat.tubes.length) return toast("Le lot est vide");
     const { debitCsv } = await import("./pdf.js");
@@ -464,6 +496,29 @@ async function exporterPdfSuite(progs, nomFichier, titreLot, fen) {
     St.telecharger(nomFichier, blob, "application/pdf");
     toast("Dossier PDF créé : " + nomFichier, 4000);
   } catch (e) { fen.fermer(); console.error(e); Dl.message("Dossier PDF", "Échec : " + e.message); }
+}
+
+/** Ouvre un lot publié et sélectionne un repère (lien d'un QR code d'étiquette). */
+async function ouvrirLien(id, rep) {
+  let mdp = At.motDePasse();
+  for (let essai = 0; essai < 3; essai++) {
+    if (!mdp) {
+      mdp = await Dl.demanderTexte("Mot de passe atelier", "Mot de passe des lots (à saisir une seule fois sur cet appareil) :", "", true);
+      if (!mdp) return;
+    }
+    try {
+      const texte = await At.lirePublie(id, mdp);
+      At.enregistrerMotDePasse(mdp);
+      ouvrirLotTexte(texte, "", true);
+      const k = etat.tubes.findIndex((t) => t.repere === rep);
+      if (k >= 0) selectionner(k); else if (rep) toast(`Repère ${rep} introuvable dans ce lot`, 4000);
+      history.replaceState(null, "", location.pathname);   // un rechargement ne rouvre pas le lien
+      return;
+    } catch (e) {
+      if (/Mot de passe/.test(e.message)) { At.enregistrerMotDePasse(""); mdp = ""; toast("Mot de passe atelier incorrect", 3000); continue; }
+      return Dl.message("Lot", e.message);
+    }
+  }
 }
 
 function ouvrirLotTexte(texte, nomDefaut, remplacer) {
@@ -598,6 +653,9 @@ async function majStatut() {
   selectionner(-1);
   if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost") && !globalThis.TC_EMBARQUE)
     navigator.serviceWorker.register("sw.js").catch(() => {});
-  if (!(await St.serveurDisponible()) && At.depotDuSite() && !etat.tubes.length) dialogueLots();
+  // lien d'étiquette (QR code) : ?l=<id du lot publié>&r=<repère> ouvre directement ce lot sur ce tube
+  const lien = new URLSearchParams(location.search);
+  if (lien.get("l")) await ouvrirLien(lien.get("l"), lien.get("r"));
+  else if (!(await St.serveurDisponible()) && At.depotDuSite() && !etat.tubes.length) dialogueLots();
   window.tubecintrage = { etat, lireFichiers, actions, programme };   // pour les tests et le dépannage
 })();
