@@ -4,6 +4,7 @@ import { OrbitControls } from "three/addons/OrbitControls.js";
 import { Simulation } from "./core/simulation.js";
 import { estCintre } from "./core/geometrie.js";
 import { affichageB } from "./core/sequence.js";
+import { MG030 } from "./modele_mg030.js";
 
 export const COULEURS = {
   droit: 0xbcc3cb, cintre: 0xffc400, cintreFait: 0x3b7dd8, enCours: 0xffc400, collision: 0xff1a1a,
@@ -131,23 +132,57 @@ export function construirePiece(prog, { soudure = true } = {}) {
   return { groupe, etiquettes, points: tous };
 }
 
+// ----------------------------------------------------------------------
+// Modèle 3D de la MG030 (js/modele_mg030.js) : bâti fixe, chariot, outil et contre-pli animés.
+const _tableaux = {};
+function geometrieModele(nom) {
+  const c = MG030.corps[nom];
+  if (!_tableaux[nom]) _tableaux[nom] = { p: new Float32Array(c.p), n: new Float32Array(c.n), i: new Uint32Array(c.i) };
+  const t = _tableaux[nom], g = new THREE.BufferGeometry();   // géométrie neuve à chaque fois (vider() la libère)
+  g.setAttribute("position", new THREE.BufferAttribute(t.p, 3));
+  if (t.n.length) g.setAttribute("normal", new THREE.BufferAttribute(t.n, 3)); else g.computeVertexNormals();
+  g.setIndex(new THREE.BufferAttribute(t.i, 1));
+  return g;
+}
+const corpsModele = (nom, materiau) => new THREE.Mesh(geometrieModele(nom), materiau);
+const rayonOutil = (prog) => (prog.etapes.length ? prog.etapes[0].rayon : (prog.outil ? prog.outil.rayon : 150));
+/** L'outil et le contre-pli du modèle ne valent que pour l'outil réel (Ø48,3 R145) ; sinon formes simplifiées. */
+const outilDuModele = (prog) => Math.abs(rayonOutil(prog) - MG030.rayonOutil) < 1 && Math.abs(prog.tube.diametre - 48.3) < 1;
+
+/** Outil et contre-pli dans leur position pour un angle de pli (°) en cours ; groupe vide si outil non modélisé. */
+function piecesMobiles(prog, angle = 0) {
+  const groupe = new THREE.Group();
+  if (!outilDuModele(prog)) return groupe;
+  const R = MG030.rayonOutil, phi = (angle * Math.PI) / 180;
+  // l'outil tourne autour de son axe vertical (0, R) dans le sens où le tube s'enroule (antihoraire vu de dessus)
+  const pivot = new THREE.Group(); pivot.position.set(0, R, 0); pivot.rotation.z = phi;
+  const outil = corpsModele("outil", matCouleur(COULEURS.matrice, { metalness: 0.4, roughness: 0.4 }));
+  outil.position.set(0, -R, 0); pivot.add(outil); groupe.add(pivot);
+  // le contre-pli (mors de 150 mm qui serre le tube sur l'outil) suit le tube : il tourne avec l'outil
+  const cp = corpsModele("contrePli", matCouleur(COULEURS.reglette));
+  cp.position.set(0, -R, 0); pivot.add(cp);
+  return groupe;
+}
+
 /** Décor machine (sol, bâti, forme, opérateur). */
 export function construireMachine(prog, { zones = false, operateur = true } = {}) {
   const groupe = new THREE.Group();
   const m = prog.machine, H = m.hauteur_axe_sol, D = prog.tube.diametre;
-  const R = prog.etapes.length ? prog.etapes[0].rayon : (prog.outil ? prog.outil.rayon : 150);
+  const R = rayonOutil(prog);
   const sol = new THREE.Mesh(new THREE.PlaneGeometry(12000, 12000), matCouleur(COULEURS.sol, { roughness: 1 }));
   sol.position.set(-2500, 0, -H); groupe.add(sol);
   const grille = new THREE.GridHelper(12000, 24, 0xb9c1ca, 0xb9c1ca);
   grille.rotation.x = Math.PI / 2; grille.position.set(-2500, 0, -H + 0.5); groupe.add(grille);
+  groupe.add(corpsModele("bati", matCouleur(COULEURS.machine)));
   for (const o of m.obstacles) {
     if (!o.actif) continue;
     const zmin = Math.max(o.zmin, -H);
     if (o.gravite === "erreur") {
+      // obstacles relevés (base du calcul des collisions) : arêtes seules, le bâti modélisé fait le volume
       const b = boite(o.xmin, o.xmax, o.ymin, o.ymax, zmin, o.zmax, matCouleur(COULEURS.machine));
-      groupe.add(b);
       const ar = new THREE.LineSegments(new THREE.EdgesGeometry(b.geometry), new THREE.LineBasicMaterial({ color: 0x6d84a3 }));
       ar.position.copy(b.position); groupe.add(ar);
+      b.geometry.dispose();
     } else if (zones) {
       const b = boite(o.xmin, o.xmax, o.ymin, o.ymax, zmin, o.zmax,
         matCouleur(COULEURS.zone, { transparent: true, opacity: 0.06, depthWrite: false }));
@@ -156,9 +191,11 @@ export function construireMachine(prog, { zones = false, operateur = true } = {}
       ar.position.copy(b.position); groupe.add(ar);
     }
   }
-  const forme = new THREE.Mesh(new THREE.CylinderGeometry(R - D / 2, R - D / 2, D * 1.6, 72), matCouleur(COULEURS.matrice, { metalness: 0.4, roughness: 0.4 }));
-  forme.rotation.x = Math.PI / 2; forme.position.set(0, R, 0); groupe.add(forme);
-  groupe.add(boite(-450, 0, -D * 1.2, -D / 2, -D * 0.8, D * 0.8, matCouleur(COULEURS.reglette)));
+  if (!outilDuModele(prog)) {   // autre outil que celui du modèle : forme et réglette simplifiées, fixes
+    const forme = new THREE.Mesh(new THREE.CylinderGeometry(R - D / 2, R - D / 2, D * 1.6, 72), matCouleur(COULEURS.matrice, { metalness: 0.4, roughness: 0.4 }));
+    forme.rotation.x = Math.PI / 2; forme.position.set(0, R, 0); groupe.add(forme);
+    groupe.add(boite(-450, 0, -D * 1.2, -D / 2, -D * 0.8, D * 0.8, matCouleur(COULEURS.reglette)));
+  }
   if (operateur) {
     const mo = matCouleur(COULEURS.operateur, { transparent: true, opacity: 0.25, depthWrite: false });
     const corps = new THREE.Mesh(new THREE.CylinderGeometry(180, 180, 1700, 24), mo);
@@ -171,8 +208,9 @@ export function construireMachine(prog, { zones = false, operateur = true } = {}
   return groupe;
 }
 
-/** Tube et chariot pour une image de la simulation. `coupe` : raccourcit la partie droite côté chariot (vignettes). */
-export function construireEtat(prog, etat, collisions = [], { coupe = null } = {}) {
+/** Tube, chariot, outil et contre-pli pour une image de la simulation.
+ *  `coupe` : raccourcit la partie droite côté chariot (vignettes). `angle` : angle de pli en cours (°), 0 hors cintrage. */
+export function construireEtat(prog, etat, collisions = [], { coupe = null, angle = 0 } = {}) {
   const groupe = new THREE.Group();
   const D = prog.tube.diametre;
   const partie = etat.partie.slice();
@@ -189,9 +227,12 @@ export function construireEtat(prog, etat, collisions = [], { coupe = null } = {
   groupe.add(new THREE.Mesh(geometrieTube(pts, D / 2, partie.map((p) => PARTIE[p])), matTube()));
   groupe.add(ligneSoudure(pts, sv, D / 2));
   if (coupeX == null) {
-    const xr = etat.xArriere;
-    groupe.add(boite(xr - 260, xr + 15, -130, 130, -110, 140, matCouleur(COULEURS.chariot)));
+    // chariot du modèle, dessiné reculé (face avant en xAvantChariot) : on amène sa face avant sur la pince
+    const chariot = corpsModele("chariot", matCouleur(COULEURS.chariot));
+    chariot.position.x = etat.xArriere + 15 - MG030.xAvantChariot;
+    groupe.add(chariot);
   }
+  groupe.add(piecesMobiles(prog, angle));
   return { groupe, points: pts, coupeX };
 }
 
@@ -334,11 +375,11 @@ export function imagePiece(prog, l = 1100, h = 760) {
 export const DIR_MACHINE = new THREE.Vector3(-2550, -3650, 2550).normalize();
 
 /** Vignette de simulation (vue de 3/4 comme dans le logiciel). */
-export function imageEtat(prog, etat, l = 900, h = 640) {
+export function imageEtat(prog, etat, l = 900, h = 640, angle = 0) {
   const scene = new THREE.Scene(); eclairer(scene);
   scene.add(construireMachine(prog, { operateur: false }));
   const R = prog.etapes.length ? prog.etapes[0].rayon : 145;
-  const { groupe, points, coupeX } = construireEtat(prog, etat, [], { coupe: -900 });
+  const { groupe, points, coupeX } = construireEtat(prog, etat, [], { coupe: -900, angle });
   scene.add(groupe);
   const cadre = [...points, [0, 2 * R, 0], [R, R, 0], [-R, R, 0]];
   const cam = cameraCadree(cadre, DIR_MACHINE, new THREE.Vector3(0, 0, 1), l / h, 0.12);
@@ -481,7 +522,7 @@ export class Vue3D {
 
   image(im, collisions = []) {
     this.vider(this.dyn);
-    this.dyn.add(construireEtat(this.prog, im.etat, collisions).groupe);
+    this.dyn.add(construireEtat(this.prog, im.etat, collisions, { angle: im.phase === "cintrage" ? im.angleEnCours || 0 : 0 }).groupe);
     this.demander();
   }
 

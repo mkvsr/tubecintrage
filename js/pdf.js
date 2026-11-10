@@ -393,7 +393,7 @@ function pageSimulation(D, prog) {
     const col = k % 2;
     if (col === 0) D.besoin(hV + 2);
     const x = MG + col * (wV + 6), y = D.y;
-    const img = imageEtat(prog, v.etat, 900, Math.round(900 * hI / wV));
+    const img = imageEtat(prog, v.etat, 900, Math.round(900 * hI / wV), v.fin ? der.beta : 0);
     D.d.addImage(img, "JPEG", x, y, wV, hI);
     D.rect(x, y, wV, hI + hBande, null, TRAIT, 0.3);
     // titre dans l'image
