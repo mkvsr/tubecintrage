@@ -380,17 +380,12 @@ const actions = {
   },
   async pdfTube() {
     const t = etat.tubes[etat.courant]; if (!t) return toast("Aucun tube sélectionné");
-    await exporterPdf([t], `${t.repere ? t.repere + " " : ""}${t.nom}`.replace(/[\\/:*?"<>|]+/g, "_") + ".pdf", "");
+    await exporterPdf([t], `${t.repere ? t.repere + " " : ""}${t.nom}`.replace(/[\\/:*?"<>|]+/g, "_") + ".pdf", "", t.repere);
   },
   async etiquettes() {
     const tubes = etat.tubes.filter((t) => t.quantite > 0);
     if (!tubes.length) return toast("Le lot est vide");
-    // id du lot publié (même nom) : le QR code ouvrira directement le tube ; sinon seulement l'application
-    let idLot = null;
-    try {
-      const mdp = At.motDePasse();
-      if (mdp && etat.nomLot) idLot = (await At.listerPublies(mdp)).find((l) => l.nom === etat.nomLot)?.id || null;
-    } catch { /* hors ligne ou pas de lot publié */ }
+    const idLot = await idLotPublie();   // le QR code ouvrira directement le tube ; sinon seulement l'application
     if (!idLot && !(await Dl.confirmer("Étiquettes",
       `Le lot « ${etat.nomLot || "sans nom"} » n'est pas publié pour l'atelier : les QR codes ouvriront seulement l'application.\n\nPour qu'ils ouvrent directement le tube, publiez d'abord le lot (bouton Publier), puis refaites les étiquettes.`,
       "Continuer quand même"))) return;
@@ -401,13 +396,11 @@ const actions = {
     const debut = Math.min(24, Math.max(1, Math.round(Dl.nombre(r, 1))));
     try {
       const { etiquettesPdf } = await import("./pdf.js");
-      const base = location.origin + location.pathname.replace(/index\.html$/, "");
       const pieces = [];
       tubes.forEach((t, k) => {
         const p = programme(t);
         for (let i = 1; i <= t.quantite; i++)
-          pieces.push({ repere: t.repere, nom: t.nom, longueur: p.longueurDebit, teinte: k, i, n: t.quantite,
-            url: base + (idLot ? `?l=${encodeURIComponent(idLot)}&r=${encodeURIComponent(t.repere)}` : "") });
+          pieces.push({ repere: t.repere, nom: t.nom, longueur: p.longueurDebit, teinte: k, i, n: t.quantite, url: lienQr(idLot, t.repere) });
       });
       const blob = await etiquettesPdf(pieces, { lot: etat.nomLot || "", debut });
       St.telecharger(`Etiquettes ${etat.nomLot || "lot"}.pdf`.replace(/[\\/:*?"<>|]+/g, "_"), blob, "application/pdf");
@@ -471,8 +464,10 @@ async function appliquerParametres(m) {
   calculerTous();
 }
 
-async function exporterPdf(tubes, nomFichier, titreLot) {
+async function exporterPdf(tubes, nomFichier, titreLot, rep = "") {
   const progs = [];
+  const idLot = await idLotPublie();   // QR code du dossier : ouvre ce lot (et ce tube pour une fiche seule)
+  const qr = { lien: lienQr(idLot, rep), lotPublie: !!idLot };
   const fen = Dl.progression("Création du dossier PDF");
   try {
     for (let k = 0; k < tubes.length; k++) { fen.maj(`Calcul ${k + 1} / ${tubes.length}`, k / tubes.length * 0.2); await pause(); progs.push(programme(tubes[k])); }
@@ -481,21 +476,43 @@ async function exporterPdf(tubes, nomFichier, titreLot) {
     if (nerr) {
       fen.fermer();
       if (!(await Dl.confirmer("Dossier PDF", `${nerr} tube(s) ont des erreurs (✖). Les inclure quand même ?\nLeurs fiches afficheront les erreurs.`, "Inclure"))) return;
-      return exporterPdfSuite(progs, nomFichier, titreLot, Dl.progression("Création du dossier PDF"));
+      return exporterPdfSuite(progs, nomFichier, titreLot, Dl.progression("Création du dossier PDF"), qr);
     }
-    return exporterPdfSuite(progs, nomFichier, titreLot, fen);
+    return exporterPdfSuite(progs, nomFichier, titreLot, fen, qr);
   } catch (e) { fen.fermer(); console.error(e); Dl.message("Dossier PDF", "Échec : " + e.message); }
 }
-async function exporterPdfSuite(progs, nomFichier, titreLot, fen) {
+async function exporterPdfSuite(progs, nomFichier, titreLot, fen, qr = {}) {
   try {
     const { dossierPdf } = await import("./pdf.js");
     if (!window.jspdf) throw new Error("Module PDF non chargé (vendor/jspdf.umd.min.js)");
     fen.maj("Mise en page…", 0.2); await pause();
-    const blob = await dossierPdf(progs, { titreLot, progression: async (i, n) => { fen.maj(`Fiche ${i} / ${n}`, 0.2 + 0.8 * i / n); await pause(); } });
+    const blob = await dossierPdf(progs, { titreLot, ...qr, progression: async (i, n) => { fen.maj(`Fiche ${i} / ${n}`, 0.2 + 0.8 * i / n); await pause(); } });
     fen.fermer();
     St.telecharger(nomFichier, blob, "application/pdf");
     toast("Dossier PDF créé : " + nomFichier, 4000);
   } catch (e) { fen.fermer(); console.error(e); Dl.message("Dossier PDF", "Échec : " + e.message); }
+}
+
+/** id du lot publié sous le nom du lot courant ; null s'il n'est pas publié (ou hors ligne). */
+async function idLotPublie() {
+  try {
+    const mdp = At.motDePasse();
+    if (mdp && etat.nomLot) return (await At.listerPublies(mdp)).find((l) => l.nom === etat.nomLot)?.id || null;
+  } catch { /* hors ligne ou pas de lot publié */ }
+  return null;
+}
+
+/** Lien des QR codes, aussi court que possible (QR code plus simple, mieux lu) : <site>?<id du lot>[.<repère>]. */
+const lienQr = (idLot, rep = "") =>
+  location.origin + location.pathname.replace(/index\.html$/, "") + (idLot ? `?${idLot}${rep ? "." + rep : ""}` : "");
+
+/** Lien lu au démarrage : ?<id>.<repère> (actuel) ou ?l=<id>&r=<repère> (premières étiquettes). */
+function lireLien() {
+  const q = location.search.slice(1);
+  if (!q) return null;
+  if (q.includes("=")) { const p = new URLSearchParams(q); return p.get("l") ? { id: p.get("l"), rep: p.get("r") } : null; }
+  const [id, rep] = decodeURIComponent(q).split(".");
+  return id ? { id, rep: rep || null } : null;
 }
 
 /** Ouvre un lot publié et sélectionne un repère (lien d'un QR code d'étiquette). */
@@ -653,9 +670,9 @@ async function majStatut() {
   selectionner(-1);
   if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost") && !globalThis.TC_EMBARQUE)
     navigator.serviceWorker.register("sw.js").catch(() => {});
-  // lien d'étiquette (QR code) : ?l=<id du lot publié>&r=<repère> ouvre directement ce lot sur ce tube
-  const lien = new URLSearchParams(location.search);
-  if (lien.get("l")) await ouvrirLien(lien.get("l"), lien.get("r"));
+  // lien de QR code (étiquette ou dossier PDF) : ouvre directement ce lot, sur ce tube s'il est précisé
+  const lien = lireLien();
+  if (lien) await ouvrirLien(lien.id, lien.rep);
   else if (!(await St.serveurDisponible()) && At.depotDuSite() && !etat.tubes.length) dialogueLots();
   window.tubecintrage = { etat, lireFichiers, actions, programme };   // pour les tests et le dépannage
 })();

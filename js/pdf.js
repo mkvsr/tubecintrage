@@ -451,7 +451,7 @@ function pageSimulation(D, prog) {
 
 // ----------------------------------------------------------------------
 /** progs : programmes calculés (un par repère). Renvoie un Blob PDF. */
-export async function dossierPdf(progs, { titreLot = "", progression = null } = {}) {
+export async function dossierPdf(progs, { titreLot = "", progression = null, lien = "", lotPublie = false } = {}) {
   const fontes = await polices();
   const D = new Doc(window.jspdf.jsPDF, fontes);
   const multi = progs.length > 1;
@@ -465,7 +465,7 @@ export async function dossierPdf(progs, { titreLot = "", progression = null } = 
     pageGabarits(D, progs[k]);
     if (progression) await progression(k + 1, progs.length);
   }
-  await qrSimulation(D);
+  qrSimulation(D, lien, lotPublie);
   D.pieds();
   return D.d.output("blob");
 }
@@ -527,20 +527,29 @@ function pageGabarits(D, prog) {
   D.y = yr + 6;
 }
 
-/** Page 1, en bas à droite : QR code vers le site (simulation), avec la légende au-dessus. */
-async function qrSimulation(D) {
-  let donnees;
-  try {
-    const buf = new Uint8Array(await (await fetch(new URL("../img/qr_simulation.png", import.meta.url))).arrayBuffer());
-    let s = ""; for (let i = 0; i < buf.length; i += 0x8000) s += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
-    donnees = "data:image/png;base64," + btoa(s);
-  } catch { return; }   // hors ligne sans copie en cache : dossier sans QR code
-  const x = L - MG - QR_TAILLE, y = QR_Y;   // en haut à droite (le bandeau de la page 1 est raccourci)
+/** QR code vectoriel (modules noirs regroupés par ligne) dans un carré de `cote` mm. */
+function dessinerQr(d, texte, x, y, cote) {
+  const mat = qrMatrice(texte, { ecc: "M" }), n = mat.length, mm = cote / n;
+  d.setFillColor("#000000");
+  mat.forEach((ligne, j) => {
+    for (let i = 0; i < n; i++) if (ligne[i]) {
+      let i2 = i; while (i2 + 1 < n && ligne[i2 + 1]) i2++;
+      d.rect(x + i * mm, y + j * mm, (i2 - i + 1) * mm + 0.01, mm + 0.01, "F");   // + 0,01 : pas de filet blanc entre modules
+      i = i2;
+    }
+  });
+}
+
+/** Page 1, en haut à droite : QR code qui ouvre ce lot dans l'application (ce tube pour une fiche seule). */
+function qrSimulation(D, lien, lotPublie) {
+  if (!lien) return;
+  const x = L - MG - QR_TAILLE, y = QR_Y;   // le bandeau de la page 1 est raccourci d'autant
   D.d.setPage(1);
-  D.d.addImage(donnees, "PNG", x, y, QR_TAILLE, QR_TAILLE);
+  dessinerQr(D.d, lien, x, y, QR_TAILLE);
   // légende fine, centrée, coupée en lignes pour ne pas dépasser la largeur du QR code ; la dernière ligne touche le code
   D.police(6, false, BLEU);
-  const lignes = D.d.splitTextToSize("Scanner pour accéder à la simulation", QR_TAILLE);
+  const leg = !lotPublie ? "Scanner pour ouvrir l'application" : /\?[^.]+\./.test(lien) ? "Scanner pour ouvrir ce tube" : "Scanner pour ouvrir ce lot";
+  const lignes = D.d.splitTextToSize(leg, QR_TAILLE);
   const hl = 6 * 0.3528 * 1.2;
   lignes.forEach((l, k) => D.texte(l, x + QR_TAILLE / 2, y - 0.8 - (lignes.length - 1 - k) * hl, { align: "center" }));
 }
@@ -560,25 +569,15 @@ export async function etiquettesPdf(pieces, { lot = "", debut = 1 } = {}) {
   const police = (t, gras, c) => { d.setFont("DV", gras ? "bold" : "normal"); d.setFontSize(t); d.setTextColor(c); };
   const parPage = ETQ.col * ETQ.lig;
   let pos = Math.min(parPage, Math.max(1, debut)) - 1;
-  const qrCache = new Map();
   for (const p of pieces) {
     if (pos >= parPage) { d.addPage(); pos = 0; }
     const ex = ETQ.gauche + (pos % ETQ.col) * ETQ.pasX, ey = ETQ.haut + Math.floor(pos / ETQ.col) * ETQ.pasY;
     pos++;
-    // QR code (vectoriel, modules noirs regroupés par ligne)
-    const q = 24, qx = ex + 2.5, qy = ey + (ETQ.h - q) / 2;
-    if (!qrCache.has(p.url)) qrCache.set(p.url, qrMatrice(p.url, { ecc: "M" }));
-    const mat = qrCache.get(p.url), n = mat.length, mm = q / n;
-    d.setFillColor("#000000");
-    mat.forEach((ligne, y) => {
-      for (let x = 0; x < n; x++) if (ligne[x]) {
-        let x2 = x; while (x2 + 1 < n && ligne[x2 + 1]) x2++;
-        d.rect(qx + x * mm, qy + y * mm, (x2 - x + 1) * mm + 0.01, mm + 0.01, "F");
-        x = x2;
-      }
-    });
+    // QR code : 25 mm, 3 mm de blanc autour (zone de silence : meilleure détection)
+    const q = 25, qx = ex + 3, qy = ey + (ETQ.h - q) / 2;
+    dessinerQr(d, p.url, qx, qy, q);
     // texte à droite du QR code
-    const x0 = qx + q + 2.5, wt = ex + ETQ.l - 2.5 - x0;
+    const x0 = qx + q + 3, wt = ex + ETQ.l - 2.5 - x0;
     police(17, true, "#10273d");
     const wr = d.getTextWidth(p.repere) + 4;
     d.setFillColor(TEINTES[p.teinte % TEINTES.length]); d.setDrawColor("#4a6b8a"); d.setLineWidth(0.3);
