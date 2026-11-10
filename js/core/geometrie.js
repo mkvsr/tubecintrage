@@ -52,7 +52,7 @@ export class Tube {
   constructor(nom, elements, diametre = 48.3, epaisseur = 2.0, matiere = "Acier", alertes = []) {
     this.nom = nom; this.elements = elements; this.diametre = diametre; this.epaisseur = epaisseur;
     this.matiere = matiere; this.alertes = alertes;
-    this.quantite = 1; this.reglages = {}; this.sources = []; this.repere = "";
+    this.quantite = 1; this.reglages = {}; this.sources = []; this.repere = ""; this.gueules = [];
   }
   get droites() { return this.elements.filter(estDroite); }
   get cintres() { return this.elements.filter(estCintre); }
@@ -63,6 +63,7 @@ export class Tube {
   copie(changes = {}) {
     const t = new Tube(this.nom, [...this.elements], this.diametre, this.epaisseur, this.matiere, [...this.alertes]);
     t.quantite = this.quantite; t.reglages = { ...this.reglages }; t.sources = [...this.sources]; t.repere = this.repere;
+    t.gueules = this.gueules || [];   // gueules de loup (coordonnées CAO, rattachées au bout par sa position : suivent un retournement)
     return Object.assign(t, changes);
   }
   inverse() {

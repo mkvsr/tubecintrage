@@ -5,11 +5,12 @@ import { Simulation } from "./core/simulation.js";
 import { estCintre } from "./core/geometrie.js";
 import { affichageB } from "./core/sequence.js";
 import { MG030 } from "./modele_mg030.js";
+import { gueulesDuTube, reculGueule, profilGueule, profondeurGueule, radiale, angleGueule } from "./core/gueule.js";
 
 export const COULEURS = {
   droit: 0xbcc3cb, cintre: 0xffc400, cintreFait: 0x3b7dd8, enCours: 0xffc400, collision: 0xff1a1a,
   surlong: 0xff5fae, soudure: 0xff1a1a, machine: 0x9db3cf, chariot: 0x1c1d1f, boutonY: 0xffd000, boutonB: 0xe8141a, sol: 0xcfd5dc,
-  zone: 0x7fbf7f, operateur: 0x5b8c5a, matrice: 0x5d6d7e, reglette: 0x7b8a99,
+  zone: 0x7fbf7f, operateur: 0x5b8c5a, matrice: 0x5d6d7e, reglette: 0x7b8a99, gueule: 0xff7a00,
 };
 const PARTIE = [COULEURS.cintreFait, COULEURS.enCours, COULEURS.droit, COULEURS.collision, COULEURS.surlong];
 
@@ -97,6 +98,33 @@ const ligneSoudure = (pts, vecs, r) => {
 };
 
 // ----------------------------------------------------------------------
+const add3 = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+const sub3 = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const mul3 = (a, k) => [a[0] * k, a[1] * k, a[2] * k];
+const dot3 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+
+/** Bout de tube à meuler en gueule de loup (orange), de la section droite à Lz du bout jusqu'au bord de coupe. */
+function emboutGueule(g, ref, Lz, nTheta = 72, nLong = 10) {
+  const pos = [], nor = [], idx = [];
+  for (let k = 0; k <= nTheta; k++) {
+    const th = -Math.PI + (2 * Math.PI * k) / nTheta, u = radiale(g, ref, th), t1 = reculGueule(g, ref, th);
+    for (let j = 0; j <= nLong; j++) {
+      const t = -Lz + ((t1 + Lz) * j) / nLong, p = add3(add3(g.E, mul3(u, g.r)), mul3(g.d, t));
+      pos.push(...p); nor.push(...u);
+    }
+  }
+  const L = nLong + 1;
+  for (let k = 0; k < nTheta; k++) for (let j = 0; j < nLong; j++) {
+    const a = k * L + j, b = a + L;
+    idx.push(a, a + 1, b, b, a + 1, b + 1);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute("normal", new THREE.Float32BufferAttribute(nor, 3));
+  geo.setIndex(idx);
+  return new THREE.Mesh(geo, matCouleur(COULEURS.gueule, { side: THREE.DoubleSide, roughness: 0.5 }));
+}
+
 /** Contenu « pièce finie » : renvoie {groupe, etiquettes, points}. */
 export function construirePiece(prog, { soudure = true } = {}) {
   const groupe = new THREE.Group();
@@ -110,8 +138,28 @@ export function construirePiece(prog, { soudure = true } = {}) {
     for (const [a, b, c] of bornes) if (sv >= a - 1e-9 && sv <= b + 1e-9) return c ? COULEURS.cintre : COULEURS.droit;
     return COULEURS.droit;
   });
-  groupe.add(new THREE.Mesh(geometrieTube(pts, r, coul), matTube()));
-  if (soudure) groupe.add(ligneSoudure(pts, sim.cadSoudure, r));
+  // gueules de loup : le bout est raccourci et la zone à meuler est dessinée en orange avec la forme de la coupe
+  let P = pts, C = coul, SV = sim.cadSoudure;
+  const gq = gueulesDuTube(tube), embouts = [];
+  for (const [g, auBout] of [[gq.avant, false], [gq.arriere, true]]) {
+    if (!g) continue;
+    const gg = { ...g, r }, ref = auBout ? SV[SV.length - 1] : SV[0];
+    const Lz = 25 - Math.min(...profilGueule(gg, ref, 90).map((x) => x.recul));   // zone orange : 25 mm avant le creux
+    const dedans = (p) => dot3(sub3(p, g.E), g.d) > -Lz;   // point dans la zone du bout
+    let i0 = 0, i1 = P.length;                              // on retire les points de la zone, depuis le bout concerné
+    if (auBout) while (i1 > 1 && dedans(P[i1 - 1])) i1--; else while (i0 < P.length - 1 && dedans(P[i0])) i0++;
+    P = P.slice(i0, i1); C = C.slice(i0, i1); SV = SV.slice(i0, i1);
+    const Q = [g.E[0] - g.d[0] * Lz, g.E[1] - g.d[1] * Lz, g.E[2] - g.d[2] * Lz];
+    if (auBout) { P.push(Q); C.push(C[C.length - 1]); SV.push(SV[SV.length - 1]); } else { P.unshift(Q); C.unshift(C[0]); SV.unshift(SV[0]); }
+    embouts.push({ g: gg, ref, Lz, Q });
+  }
+  groupe.add(new THREE.Mesh(geometrieTube(P, r, C), matTube()));
+  if (soudure) groupe.add(ligneSoudure(P, SV, r));
+  for (const { g, ref, Lz, Q } of embouts) {
+    groupe.add(emboutGueule(g, ref, Lz));
+    const bout = add3(g.E, mul3(g.d, reculGueule(g, ref, 0)));   // génératrice de la soudure jusqu'au bord de coupe
+    if (soudure) groupe.add(ligneSoudure([Q, bout], [ref, ref], r));
+  }
   const tous = [...pts];
   if (prog.surlongArriere > 0) {
     const d = tube.droites[tube.droites.length - 1].direction, a = tube.fin;
@@ -127,8 +175,10 @@ export function construirePiece(prog, { soudure = true } = {}) {
     etiquettes.push({ pos: [m[0] + v[0] * k, m[1] + v[1] * k, m[2] + v[2] * k], ancre: m, texte: String(i + 1), type: "pli",
       detail: `${(c.angle * 180 / Math.PI).toFixed(1).replace(".", ",")}°` });
   });
-  etiquettes.push({ pos: pts[0], texte: "AVANT", type: "extremite", detail: "entre en premier" });
-  etiquettes.push({ pos: tous[tous.length - 1], texte: "ARRIÈRE", type: "extremite", detail: "pince du chariot" });
+  // gueule de loup indiquée dans l'étiquette du bout (évite deux étiquettes superposées)
+  const gl = (g) => (g ? `<br>gueule de loup sur Ø${(2 * g.Rm).toFixed(1).replace(".", ",")} à ${angleGueule(g).toFixed(0)}°` : "");
+  etiquettes.push({ pos: pts[0], texte: "AVANT", type: "extremite", detail: "entre en premier" + gl(gq.avant) });
+  etiquettes.push({ pos: tous[tous.length - 1], texte: "ARRIÈRE", type: "extremite", detail: "pince du chariot" + gl(gq.arriere) });
   return { groupe, etiquettes, points: tous };
 }
 

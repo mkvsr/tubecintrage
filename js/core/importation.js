@@ -2,6 +2,7 @@
 // L'import STEP est dans step.js (chargé à la demande).
 import { sub, cross, unit, norm, neg, angleEntre } from "./vec.js";
 import { tubeDepuisSegments, tubeDepuisPoints, TOL_POINT, TOL_TANGENCE, Droite } from "./geometrie.js";
+import { gueuleVersJson, gueuleDepuisJson } from "./gueule.js";
 
 export class ErreurImport extends Error {}
 
@@ -142,7 +143,8 @@ export function lotVersTexte(tubes, nom = "") {
   return JSON.stringify({
     format: FORMAT_LOT, nom,
     tubes: tubes.map((t) => ({ nom: t.nom, repere: t.repere, quantite: t.quantite, diametre: t.diametre,
-      epaisseur: t.epaisseur, matiere: t.matiere, sources: t.sources, reglages: t.reglages, segments: segmentsDe(t) })),
+      epaisseur: t.epaisseur, matiere: t.matiere, sources: t.sources, reglages: t.reglages, segments: segmentsDe(t),
+      ...(t.gueules?.length ? { gueules: t.gueules.map(gueuleVersJson) } : {}) })),
   }, null, 1);
 }
 
@@ -155,6 +157,7 @@ export function chargerLot(texte) {
       const t = tubeDepuisSegments(x.nom, x.segments.map(versNombres), x.diametre, x.epaisseur, x.matiere);
       t.quantite = Number(x.quantite ?? 1); t.sources = [...(x.sources || [])];
       t.reglages = { ...(x.reglages || {}) }; t.repere = x.repere || "";
+      t.gueules = (x.gueules || []).map(gueuleDepuisJson);
       tubes.push(t);
     } catch (e) { rapport.push(`${x.nom} : ${e.message}`); }
   }

@@ -4,6 +4,7 @@ import { Simulation } from "./core/simulation.js";
 import { planDeCoupe } from "./core/debit.js";
 import { aVerifier } from "./core/parametres.js";
 import { imagePiece, imageEtat } from "./vue3d.js";
+import { gueulesDuTube, profilGueule, angleGueule } from "./core/gueule.js";
 
 const BLEU = "#1f3b57", GRIS = "#5d6d7e", CLAIR = "#eef2f6", ROUGE = "#b03a2e", JAUNE_TXT = "#9a6a00", TRAIT = "#c5ced8";
 const JAUNE = "#f2c14e", ROUGE_B = "#d62728";
@@ -328,6 +329,9 @@ function ficheTube(D, prog, remarquesMachine) {
     "Extrémité AVANT sur la marque zéro de l'outil, puis bouton jaune (zéro Y) et bouton rouge (zéro B).",
     `L'extrémité AVANT correspond à ${cote} de l'esquisse CAO.`,
   ];
+  const gqF = gueulesDuTube(prog.tube);
+  const bouts = [gqF.avant && "AVANT", gqF.arriere && "ARRIÈRE"].filter(Boolean);
+  if (bouts.length) prep.push(`Après cintrage : gueule de loup à meuler côté ${bouts.join(" et ")} (orange sur l'image), gabarit à l'échelle 1 dans ce dossier.`);
   let yp = D.y + 7;
   prep.forEach((p, k) => {
     D.d.setFillColor(BLEU); D.d.circle(xP + 2, yp + 1.6, 2, "F");
@@ -442,11 +446,69 @@ export async function dossierPdf(progs, { titreLot = "", progression = null } = 
     premier = false;
     ficheTube(D, progs[k], !multi);
     if (progs[k].etapes.length) pageSimulation(D, progs[k]);
+    pageGabarits(D, progs[k]);
     if (progression) await progression(k + 1, progs.length);
   }
   await qrSimulation(D);
   D.pieds();
   return D.d.output("blob");
+}
+
+/** Gabarits de gueule de loup à l'échelle 1 : développé de la surface extérieure du tube (largeur π × Ø),
+ *  trait de coupe en haut, bande de 50 mm en dessous pour l'enrouler, repère de la soudure au milieu.
+ *  Gauche → droite = sens antihoraire vu depuis le bout du tube (gabarit enroulé face imprimée vers l'extérieur,
+ *  trait de coupe vers le bout). */
+function pageGabarits(D, prog) {
+  const t = prog.tubeCao, gq = gueulesDuTube(prog.tube);
+  const bouts = [["AVANT", "entre en premier dans la machine", gq.avant, true], ["ARRIÈRE", "côté pince du chariot", gq.arriere, false]]
+    .filter((b) => b[2]);
+  if (!bouts.length) return;
+  const SV = new Simulation(prog, 12).cadSoudure;
+  const r = prog.tube.diametre / 2, W = Math.PI * prog.tube.diametre, BANDE = 50;
+  D.nouvellePage();
+  D.entete(`Gabarits de gueule de loup — ${t.repere ? t.repere + " · " : ""}${t.nom}`,
+    "Imprimer à 100 % (taille réelle, sans ajustement). Découper sur le trait noir, enrouler face imprimée vers l'extérieur,",
+    "trait de coupe côté bout du tube, repère SOUDURE sur la soudure ; tracer, puis meuler jusqu'au trait.");
+  if (W > L - 10) { D.para(`Tube Ø${f1(prog.tube.diametre)} : développé de ${f1(W)} mm, plus large que la page A4 — gabarit non imprimable.`, MG, D.y, LU, 9, true, ROUGE); return; }
+  for (const [nom, detail, g, avant] of bouts) {
+    const ref = avant ? SV[0] : SV[SV.length - 1];
+    const prof = profilGueule({ ...g, r }, ref, 240);
+    const tmax = Math.max(...prof.map((p) => p.recul)), tmin = Math.min(...prof.map((p) => p.recul));
+    const H = tmax - tmin + BANDE;
+    D.besoin(H + 16);
+    D.police(10, true, BLEU); D.texte(`Bout ${nom}`, MG, D.y + 4);
+    D.police(8.5, false, GRIS);
+    D.texte(`(${detail}) — sur Ø${f1(2 * g.Rm)} (${g.piece || "tube d'en face"}) à ${f1(angleGueule(g))}°, profondeur ${f1(tmax - tmin)} mm`, MG + 24, D.y + 4, { maxWidth: LU - 24 });
+    const x0 = (L - W) / 2, y0 = D.y + 9, yb = y0 + H;
+    const X = (th) => x0 + r * (th + Math.PI), Y = (rec) => y0 + (tmax - rec);
+    // contour à découper
+    D.d.setDrawColor("#000000"); D.d.setLineWidth(0.5); D.d.setLineDash([]);
+    for (let k = 1; k < prof.length; k++) D.d.line(X(prof[k - 1].theta), Y(prof[k - 1].recul), X(prof[k].theta), Y(prof[k].recul));
+    D.d.line(X(Math.PI), Y(prof[prof.length - 1].recul), X(Math.PI), yb);
+    D.d.line(X(Math.PI), yb, X(-Math.PI), yb);
+    D.d.line(X(-Math.PI), yb, X(-Math.PI), Y(prof[0].recul));
+    // quarts de tour (repères fins)
+    D.d.setDrawColor(GRIS); D.d.setLineWidth(0.15); D.d.setLineDash([1, 1.5]);
+    for (const th of [-Math.PI / 2, Math.PI / 2]) D.d.line(X(th), Y(prof[Math.round(((th + Math.PI) / (2 * Math.PI)) * (prof.length - 1))].recul) + 2, X(th), yb - 2);
+    // soudure : au milieu du gabarit
+    const ys = Y(prof[Math.round((prof.length - 1) / 2)].recul);
+    D.d.setDrawColor(ROUGE_B); D.d.setLineWidth(0.5); D.d.setLineDash([2.5, 1.5]);
+    D.d.line(X(0), ys + 1.5, X(0), yb - 1);
+    D.d.setLineDash([]);
+    D.police(9, true, ROUGE_B); D.texte("SOUDURE", X(0), yb - 3, { align: "center" });
+    // indications dans la bande
+    D.police(7.5, false, GRIS);
+    D.texte(`↑ bout ${nom} du tube ↑`, X(0) - r * Math.PI / 2, yb - 10, { align: "center" });
+    D.texte(`${t.repere || t.nom} · Ø${f1(prog.tube.diametre)}`, X(0) + r * Math.PI / 2, yb - 10, { align: "center" });
+    D.y = yb + 6;
+  }
+  // contrôle de l'échelle d'impression
+  D.besoin(12);
+  D.d.setDrawColor("#000000"); D.d.setLineWidth(0.4);
+  const xr = MG, yr = D.y + 3;
+  D.d.line(xr, yr, xr + 100, yr); D.d.line(xr, yr - 2, xr, yr + 2); D.d.line(xr + 100, yr - 2, xr + 100, yr + 2);
+  D.police(7.5, false, GRIS); D.texte("Contrôle d'impression : ce trait doit mesurer 100 mm.", xr + 104, yr + 1);
+  D.y = yr + 6;
 }
 
 /** Page 1, en bas à droite : QR code vers le site (simulation), avec la légende au-dessus. */
