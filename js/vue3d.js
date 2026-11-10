@@ -160,13 +160,13 @@ function septSegments(x, texte, nb, ox, oy, s) {
     e: [[0, 0.56], [0, 0.92]], f: [[0, 0.08], [0, 0.44]], g: [[0.14, 0.5], [0.86, 0.5]] };
   x.lineWidth = 4.6 * s; x.lineCap = "round";
   for (let k = 0; k < nb; k++) {
-    const x0 = 4 + k * pas, on = SEG7[chiffres[k]] ?? "";
+    const x0 = 4 + k * pas + (dec && k > point ? 12 : 0), on = SEG7[chiffres[k]] ?? "";   // espace après la virgule
     for (const [n, [[u0, v0], [u1, v1]]] of Object.entries(seg)) {
       const [x1, y1] = P(x0, u0, v0), [x2, y2] = P(x0, u1, v1);
       x.strokeStyle = on.includes(n) ? "#ff2a1a" : "#2a0805";
       x.beginPath(); x.moveTo(x1, y1); x.lineTo(x2, y2); x.stroke();
     }
-    if (dec && k === point) { const [cx, cy] = P(x0 + 4, 1, 1); x.fillStyle = "#ff2a1a"; x.beginPath(); x.arc(cx, cy, 2.6 * s, 0, 7); x.fill(); }
+    if (dec && k === point) { const [cx, cy] = P(x0 + (pas - w + 12) / 2, 1, 1); x.fillStyle = "#ff2a1a"; x.beginPath(); x.arc(cx, cy, 3.6 * s, 0, 7); x.fill(); }
   }
 }
 const f1 = (v) => (Math.abs(v) < 0.05 ? 0 : Number(v)).toFixed(1).replace(".", ",");

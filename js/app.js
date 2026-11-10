@@ -29,6 +29,7 @@ document.querySelectorAll(".actions button").forEach((b) => {
 // ----------------------------------------------------------------------
 // Afficheur 7 segments en SVG (comme la commande)
 const SEG = { "0": "abcdef", "1": "bc", "2": "abged", "3": "abgcd", "4": "fgbc", "5": "afgcd", "6": "afgedc", "7": "abc", "8": "abcdefg", "9": "abcdfg", "-": "g", " ": "" };
+const ESP = 12;   // espace (unités du dessin) entre partie entière et décimale : virgule plus visible
 function sept(svg, texte, nb) {
   const h = 40, w = 21, pas = 29, inc = 4, e = 4.6;
   const s = texte.replace(",", ".");
@@ -37,17 +38,18 @@ function sept(svg, texte, nb) {
   const P = (x0, u, v) => [x0 + u * w + (1 - v) * inc, 2 + v * h];
   let out = "";
   for (let k = 0; k < nb; k++) {
-    const x0 = 4 + k * pas, on = SEG[chiffres[k]] ?? "";
+    const x0 = 4 + k * pas + (dec && k > point ? ESP : 0), on = SEG[chiffres[k]] ?? "";   // espace après la virgule
     const seg = { a: [[0.14, 0], [0.86, 0]], b: [[1, 0.08], [1, 0.44]], c: [[1, 0.56], [1, 0.92]], d: [[0.14, 1], [0.86, 1]],
       e: [[0, 0.56], [0, 0.92]], f: [[0, 0.08], [0, 0.44]], g: [[0.14, 0.5], [0.86, 0.5]] };
     for (const [n, [[u0, v0], [u1, v1]]] of Object.entries(seg)) {
       const [x1, y1] = P(x0, u0, v0), [x2, y2] = P(x0, u1, v1);
       out += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${on.includes(n) ? "#ff2a1a" : "#2a0805"}" stroke-width="${e}" stroke-linecap="round"/>`;
     }
-    if (dec && k === point) out += `<circle cx="${x0 + w + 4}" cy="${2 + h}" r="2.6" fill="#ff2a1a"/>`;
+    if (dec && k === point) out += `<circle cx="${x0 + w + (pas - w + ESP) / 2}" cy="${2 + h}" r="3.6" fill="#ff2a1a"/>`;
   }
-  svg.setAttribute("viewBox", `0 0 ${8 + nb * pas} ${h + 5}`);
-  svg.style.aspectRatio = `${8 + nb * pas} / ${h + 5}`;
+  const larg = 8 + nb * pas + (dec ? ESP : 0);
+  svg.setAttribute("viewBox", `0 0 ${larg} ${h + 5}`);
+  svg.style.aspectRatio = `${larg} / ${h + 5}`;
   svg.innerHTML = out;
 }
 

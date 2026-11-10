@@ -8,7 +8,7 @@ import { imagePiece, imageEtat } from "./vue3d.js";
 const BLEU = "#1f3b57", GRIS = "#5d6d7e", CLAIR = "#eef2f6", ROUGE = "#b03a2e", JAUNE_TXT = "#9a6a00", TRAIT = "#c5ced8";
 const JAUNE = "#f2c14e", ROUGE_B = "#d62728";
 const L = 210, H = 297, MG = 15, LU = L - 2 * MG;
-const QR_TAILLE = 20, QR_RESERVE = 26;   // QR code d'accès à la simulation (page 1, en bas à droite), mm
+const QR_TAILLE = 24, QR_RESERVE = 34;   // QR code d'accès à la simulation (page 1, en bas à droite), mm
 
 export const f1 = (v, n = 1) => (Math.abs(v) < 0.5 * 10 ** -n ? 0 : Number(v)).toFixed(n).replace(".", ",");
 const g = (x) => String(+Number(x).toPrecision(6)).replace(".", ",");
@@ -460,8 +460,11 @@ async function qrSimulation(D) {
   const x = L - MG - QR_TAILLE, y = H - 10 - QR_TAILLE;
   D.d.setPage(1);
   D.d.addImage(donnees, "PNG", x, y, QR_TAILLE, QR_TAILLE);
-  D.police(7, true, BLEU);
-  D.texte("Scanner pour accéder à la simulation", x + QR_TAILLE, y - 1, { align: "right" });
+  // légende fine, centrée, coupée en lignes pour ne pas dépasser la largeur du QR code ; la dernière ligne touche le code
+  D.police(6, false, BLEU);
+  const lignes = D.d.splitTextToSize("Scanner pour accéder à la simulation", QR_TAILLE);
+  const hl = 6 * 0.3528 * 1.2;
+  lignes.forEach((l, k) => D.texte(l, x + QR_TAILLE / 2, y - 0.8 - (lignes.length - 1 - k) * hl, { align: "center" }));
 }
 
 /** Liste de débit CSV (séparateur ;, UTF-8 avec BOM pour Excel). */
