@@ -37,8 +37,12 @@ export function chercherGueule(E, d, r, cylindres) {
     const L = norm(sub(c.p1, c.p0)); if (L < 1e-6) continue;
     const a = unit(sub(c.p1, c.p0));
     if (Math.acos(Math.min(1, Math.abs(dot(d, a)))) < ANGLE_MINI) continue;
+    if (c.tubulaire === false) continue;                     // tôle, gousset… : faces courbes de découpe, pas un tube
     const w = sub(E, c.p0), t = dot(w, a);
-    if (t < -r || t > L + r) continue;                       // le bout n'est pas en face de ce tronçon
+    // l'empreinte du bout sur l'axe d'en face (± r / sin angle) doit tenir sur la longueur du tronçon :
+    // écarte les petits cylindres (congés, arrondis, épaisseur d'une tôle) et les bouts qui dépassent du tube
+    const sinA = Math.sqrt(Math.max(1e-9, 1 - dot(d, a) ** 2)), demi = r / sinA;
+    if (t - demi < -2 || t + demi > L + 2) continue;
     const dist = norm(sub(w, mul(a, t)));
     if (dist > c.rayon + JEU) continue;                      // le bout ne touche pas ce tube
     if (dist < bestD) { bestD = dist; best = gueule(E, d, r, c.p0, a, c.rayon, c.piece); }

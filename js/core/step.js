@@ -403,7 +403,9 @@ export async function chargerStep(buffer, nomFichier = "piece.step", options = {
   // gueules de loup : bouts de tube qui arrivent sur un autre solide de l'assemblage (renforts écartés compris)
   const cylindres = [];
   analyses.forEach(({ nomS, res }, k) => {
-    if (res) for (const s of res.segs) if (s.type === "ligne") cylindres.push({ p0: s.p0, p1: s.p1, rayon: res.diametre / 2, piece: nomS, k });
+    // tubulaire : rond plein, ou paroi mince devant le rayon (une tôle à découpes arrondies donne une « épaisseur » énorme)
+    const tubulaire = !res || res.epaisseur == null || res.epaisseur <= 0.5 * (res.diametre / 2);
+    if (res) for (const s of res.segs) if (s.type === "ligne") cylindres.push({ p0: s.p0, p1: s.p1, rayon: res.diametre / 2, piece: nomS, k, tubulaire });
   });
   // 1) coupe déjà modélisée sur la pièce (gueule de loup, coupe biaise…) : mesurée sur le maillage, prioritaire ;
   // 2) sinon, bout droit qui arrive sur un autre tube : coupe calculée contre ce tube.
