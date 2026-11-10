@@ -66,7 +66,7 @@
   {
    "nom": "Zone opérateur (pupitre)",
    "xmin": -1500,
-   "xmax": 0,
+   "xmax": 130,
    "ymin": -3000,
    "ymax": -800,
    "zmin": -1000,
@@ -75,5 +75,5 @@
    "actif": true
   }
  ],
- "publie": "2026-11-10T07:16:26.421Z"
+ "publie": "2026-11-10T07:16:40.508Z"
 }
