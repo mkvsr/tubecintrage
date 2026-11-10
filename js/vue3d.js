@@ -443,6 +443,11 @@ export class Vue3D {
   }
 
   rendre() {
+    // mannequin opérateur : masqué seulement quand la caméra est dans sa tête (vue Recentrer), visible sinon
+    if (this._operateur) {
+      const loin = this.camera.position.distanceTo(this._tete) > 600;
+      for (const o of this._operateur) o.visible = loin;
+    }
     this.renderer.render(this.scene, this.camera);
     const l = this.conteneur.clientWidth, h = this.conteneur.clientHeight;
     this.etiquettes.forEach((e) => {
@@ -465,7 +470,7 @@ export class Vue3D {
   }
 
   piece(prog) {
-    this.mode = "piece";
+    this.mode = "piece"; this._operateur = null;
     this.vider(this.contenu); this.vider(this.dyn);
     const { groupe, etiquettes, points } = construirePiece(prog);
     this.contenu.add(groupe);
@@ -490,13 +495,13 @@ export class Vue3D {
     this.prog = prog;
     this.vider(this.contenu); this.vider(this.dyn); this._poserEtiquettes([]);
     this.contenu.add(construireMachine(prog, { zones }));
+    this._operateur = []; this.contenu.traverse((o) => { if (o.name === "operateur") this._operateur.push(o); });
+    this._tete = new THREE.Vector3(-650, -1150, -prog.machine.hauteur_axe_sol + 1830);
     this._poserEtiquettes([{ pos: [-650, -1150, -prog.machine.hauteur_axe_sol + 2050], texte: "Opérateur (pupitre)", type: "info" }]);
     this.vueMachine();
   }
 
-  _placer(oeil, cible, operateurVisible = true) {
-    // mannequin opérateur masqué quand la caméra est à sa place (il couvrirait le bas de l'image)
-    this.contenu.traverse((o) => { if (o.name === "operateur") o.visible = operateurVisible; });
+  _placer(oeil, cible) {
     this.camera.position.copy(oeil);
     this.controles.target.copy(cible);
     this.camera.near = 5; this.camera.far = 60000; this.camera.updateProjectionMatrix();
@@ -506,7 +511,7 @@ export class Vue3D {
   /** Vue « Recentrer » : depuis la tête de l'opérateur au pupitre (mannequin de construireMachine), regard vers l'outil. */
   vueMachine() {
     const H = this.prog ? this.prog.machine.hauteur_axe_sol : 1015;
-    this._placer(new THREE.Vector3(-650, -1150, -H + 1830), new THREE.Vector3(0, 0, 0), false);
+    this._placer(new THREE.Vector3(-650, -1150, -H + 1830), new THREE.Vector3(0, 0, 0));
   }
 
   /** Vue « Zoom » : 1000 mm au-dessus de l'outil, regard vers le bas, côté opérateur en bas de l'écran.
