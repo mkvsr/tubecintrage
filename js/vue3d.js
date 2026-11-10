@@ -8,10 +8,10 @@ import { MG030 } from "./modele_mg030.js";
 
 export const COULEURS = {
   droit: 0xbcc3cb, cintre: 0xffc400, cintreFait: 0x3b7dd8, enCours: 0xffc400, collision: 0xff1a1a,
-  surlong: 0xc9b8ff, soudure: 0xff1a1a, machine: 0x9db3cf, chariot: 0x1c1d1f, boutonY: 0xffd000, boutonB: 0xe8141a, sol: 0xcfd5dc,
+  surlong: 0xff5fae, soudure: 0xff1a1a, machine: 0x9db3cf, chariot: 0x1c1d1f, boutonY: 0xffd000, boutonB: 0xe8141a, sol: 0xcfd5dc,
   zone: 0x7fbf7f, operateur: 0x5b8c5a, matrice: 0x5d6d7e, reglette: 0x7b8a99,
 };
-const PARTIE = [COULEURS.cintreFait, COULEURS.enCours, COULEURS.droit, COULEURS.collision];
+const PARTIE = [COULEURS.cintreFait, COULEURS.enCours, COULEURS.droit, COULEURS.collision, COULEURS.surlong];
 
 // ----------------------------------------------------------------------
 // Géométrie d'un tube le long d'une polyligne (repère par transport parallèle), couleur par point
@@ -117,7 +117,7 @@ export function construirePiece(prog, { soudure = true } = {}) {
     const d = tube.droites[tube.droites.length - 1].direction, a = tube.fin;
     const b = [a[0] + d[0] * prog.surlongArriere, a[1] + d[1] * prog.surlongArriere, a[2] + d[2] * prog.surlongArriere];
     groupe.add(new THREE.Mesh(geometrieTube([a, b], r * 1.001, [COULEURS.surlong, COULEURS.surlong]),
-      new THREE.MeshStandardMaterial({ vertexColors: true, transparent: true, opacity: 0.6 })));
+      matTube()));
     tous.push(b);
   }
   const etiquettes = [];
@@ -276,7 +276,15 @@ export function construireEtat(prog, etat, collisions = [], { coupe = null, angl
   const groupe = new THREE.Group();
   const D = prog.tube.diametre;
   const partie = etat.partie.slice();
-  for (const c of collisions) for (const k of c.indices) partie[k] = 3;
+  // surlongueurs à recouper (rose) : repérées par la longueur cumulée depuis l'avant et depuis l'arrière du tube
+  const sa = prog.surlongAvant || 0, sr = prog.surlongArriere || 0;
+  if (sa > 0 || sr > 0) {
+    const P = etat.pts, cum = [0];
+    for (let k = 1; k < P.length; k++) cum.push(cum[k - 1] + Math.hypot(P[k][0] - P[k - 1][0], P[k][1] - P[k - 1][1], P[k][2] - P[k - 1][2]));
+    const tot = cum[cum.length - 1];
+    cum.forEach((c, k) => { if (c < sa - 1e-6 || tot - c < sr - 1e-6) partie[k] = 4; });
+  }
+  for (const c of collisions) for (const k of c.indices) partie[k] = 3;   // une collision reste prioritaire
   let pts = etat.pts, sv = etat.soudure;
   let coupeX = null;
   if (coupe != null) {

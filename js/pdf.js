@@ -337,7 +337,7 @@ function ficheTube(D, prog, remarquesMachine) {
   D.y += hImg + 1.5;
   D.police(6.8, false, GRIS);
   D.texte("Gris : droites · orange : plis numérotés dans l'ordre de cintrage · trait rouge : soudure"
-    + (prog.surlongAvant || prog.surlongArriere ? " · violet : surlongueur à recouper" : ""), MG, D.y + 2.5);
+    + (prog.surlongAvant || prog.surlongArriere ? " · rose : surlongueur à recouper" : ""), MG, D.y + 2.5);
   D.y += 5;
 
   if (prog.etapes.length) {
@@ -384,7 +384,7 @@ function pageSimulation(D, prog) {
   const t = prog.tubeCao;
   D.nouvellePage();
   D.entete(`Simulation pas à pas — ${t.repere ? t.repere + " · " : ""}${t.nom}`,
-    "Position du tube juste avant chaque cintrage, vue de l'opérateur. Bleu : déjà cintré · gris : partie droite · trait rouge : soudure.");
+    "Position du tube juste avant chaque cintrage, vue de l'opérateur. Bleu : déjà cintré · gris : partie droite · rose : surlongueur à recouper · trait rouge : soudure.");
   const sim = new Simulation(prog, 12);
   const vignettes = prog.etapes.map((et) => ({ et, etat: sim.etatAvantPli(et.numero) }));
   const der = prog.etapes[prog.etapes.length - 1];
