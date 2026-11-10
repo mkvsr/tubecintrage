@@ -4,7 +4,7 @@ import { Simulation } from "./core/simulation.js";
 import { planDeCoupe } from "./core/debit.js";
 import { aVerifier } from "./core/parametres.js";
 import { imagePiece, imageEtat } from "./vue3d.js";
-import { gueulesDuTube, profilGueule, angleGueule } from "./core/gueule.js";
+import { gueulesDuTube, profilGueule, descriptionGueule } from "./core/gueule.js";
 
 const BLEU = "#1f3b57", GRIS = "#5d6d7e", CLAIR = "#eef2f6", ROUGE = "#b03a2e", JAUNE_TXT = "#9a6a00", TRAIT = "#c5ced8";
 const JAUNE = "#f2c14e", ROUGE_B = "#d62728";
@@ -472,13 +472,13 @@ function pageGabarits(D, prog) {
   if (W > L - 10) { D.para(`Tube Ø${f1(prog.tube.diametre)} : développé de ${f1(W)} mm, plus large que la page A4 — gabarit non imprimable.`, MG, D.y, LU, 9, true, ROUGE); return; }
   for (const [nom, detail, g, avant] of bouts) {
     const ref = avant ? SV[0] : SV[SV.length - 1];
-    const prof = profilGueule({ ...g, r }, ref, 240);
+    const prof = profilGueule({ ...g, r }, ref, 720);   // 0,5° : les pointes d'une gueule de loup sont effilées
     const tmax = Math.max(...prof.map((p) => p.recul)), tmin = Math.min(...prof.map((p) => p.recul));
     const H = tmax - tmin + BANDE;
     D.besoin(H + 16);
     D.police(10, true, BLEU); D.texte(`Bout ${nom}`, MG, D.y + 4);
     D.police(8.5, false, GRIS);
-    D.texte(`(${detail}) — sur Ø${f1(2 * g.Rm)} (${g.piece || "tube d'en face"}) à ${f1(angleGueule(g))}°, profondeur ${f1(tmax - tmin)} mm`, MG + 24, D.y + 4, { maxWidth: LU - 24 });
+    D.texte(`(${detail}) — ${descriptionGueule(g)}` + (g.type === "mesure" ? "" : `, profondeur ${f1(tmax - tmin)} mm`), MG + 24, D.y + 4, { maxWidth: LU - 24 });
     const x0 = (L - W) / 2, y0 = D.y + 9, yb = y0 + H;
     const X = (th) => x0 + r * (th + Math.PI), Y = (rec) => y0 + (tmax - rec);
     // contour à découper

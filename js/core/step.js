@@ -5,7 +5,7 @@
 import { add, sub, mul, dot, cross, norm, unit, angleEntre, neg } from "./vec.js";
 import { chainer } from "./importation.js";
 import { tubeDepuisSegments } from "./geometrie.js";
-import { chercherGueule, angleGueule } from "./gueule.js";
+import { chercherGueule, mesurerCoupe, descriptionGueule } from "./gueule.js";
 
 export class ErreurStep extends Error {}
 
@@ -405,20 +405,35 @@ export async function chargerStep(buffer, nomFichier = "piece.step", options = {
   analyses.forEach(({ nomS, res }, k) => {
     if (res) for (const s of res.segs) if (s.type === "ligne") cylindres.push({ p0: s.p0, p1: s.p1, rayon: res.diametre / 2, piece: nomS, k });
   });
+  // 1) coupe déjà modélisée sur la pièce (gueule de loup, coupe biaise…) : mesurée sur le maillage, prioritaire ;
+  // 2) sinon, bout droit qui arrive sur un autre tube : coupe calculée contre ce tube.
+  const dirDe = (e) => { try { return e.direction || null; } catch { return null; } };   // null pour un cintre
+  const boutsDe = (t) => {
+    const premier = t.elements[0], dernier = t.elements[t.elements.length - 1], b = [];
+    if (dirDe(premier)) b.push(["bout 1", t.debut, mul(dirDe(premier), -1), premier.longueur]);
+    if (dirDe(dernier)) b.push(["bout 2", t.fin, dirDe(dernier), dernier.longueur]);
+    return b;
+  };
+  const mesurer = (mesh, t, E, d, L) => mesurerCoupe(mesh.attributes.position.array, mesh.index.array, E, d, t.diametre / 2, L);
+  // le maillage de l'analyse est grossier (17°) : s'il y a une coupe modélisée, on la remesure sur un maillage fin
+  let fins = null;
+  if (tubes.some((t) => boutsDe(t).some(([, E, d, L]) => mesurer(meshes[solideDe.get(t)], t, E, d, L)))) {
+    const rf = occt.ReadStepFile(new Uint8Array(buffer), {
+      linearUnit: "millimeter", linearDeflectionType: "absolute_value", linearDeflection: 0.05, angularDeflection: 0.05,
+    });
+    if (rf.success && rf.meshes.length === meshes.length) fins = rf.meshes;
+  }
   for (const t of tubes) {
-    const autres = cylindres.filter((c) => c.k !== solideDe.get(t));
-    const premier = t.elements[0], dernier = t.elements[t.elements.length - 1];
-    const bouts = [];
-    const dirDe = (e) => { try { return e.direction || null; } catch { return null; } };   // null pour un cintre
-    if (dirDe(premier)) bouts.push(["bout 1", t.debut, mul(dirDe(premier), -1)]);
-    if (dirDe(dernier)) bouts.push(["bout 2", t.fin, dirDe(dernier)]);
+    const k = solideDe.get(t), autres = cylindres.filter((c) => c.k !== k);
     t.gueules = [];
     const notes = [];
-    for (const [cote, E, d] of bouts) {
-      const g = chercherGueule(E, d, t.diametre / 2, autres);
-      if (g) { t.gueules.push(g); notes.push(`${cote} sur ${g.piece} (Ø${fmt(2 * g.Rm)} à ${fmt(angleGueule(g))}°)`); }
+    for (const [cote, E, d, L] of boutsDe(t)) {
+      const voisin = chercherGueule(E, d, t.diametre / 2, autres);
+      let g = mesurer((fins || meshes)[k], t, E, d, L);
+      if (g) g.piece = voisin?.piece || ""; else g = voisin;
+      if (g) { t.gueules.push(g); notes.push(`${cote} : ${descriptionGueule(g)}`); }
     }
-    if (notes.length) rapport.push(`${t.nom} : gueule de loup ${notes.join(" et ")} — affichée en orange, gabarit dans le dossier PDF`);
+    if (notes.length) rapport.push(`${t.nom} : ${notes.join(" ; ")} — affichée en orange, gabarit dans le dossier PDF`);
   }
   if (!meshes.length) throw new ErreurStep("Aucun solide dans le fichier STEP");
   return { tubes, rapport };

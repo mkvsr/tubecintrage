@@ -5,7 +5,7 @@ import { Simulation } from "./core/simulation.js";
 import { estCintre } from "./core/geometrie.js";
 import { affichageB } from "./core/sequence.js";
 import { MG030 } from "./modele_mg030.js";
-import { gueulesDuTube, reculGueule, profilGueule, profondeurGueule, radiale, angleGueule } from "./core/gueule.js";
+import { gueulesDuTube, reculGueule, profilGueule, radiale, descriptionGueule } from "./core/gueule.js";
 
 export const COULEURS = {
   droit: 0xbcc3cb, cintre: 0xffc400, cintreFait: 0x3b7dd8, enCours: 0xffc400, collision: 0xff1a1a,
@@ -176,7 +176,7 @@ export function construirePiece(prog, { soudure = true } = {}) {
       detail: `${(c.angle * 180 / Math.PI).toFixed(1).replace(".", ",")}°` });
   });
   // gueule de loup indiquée dans l'étiquette du bout (évite deux étiquettes superposées)
-  const gl = (g) => (g ? `<br>gueule de loup sur Ø${(2 * g.Rm).toFixed(1).replace(".", ",")} à ${angleGueule(g).toFixed(0)}°` : "");
+  const gl = (g) => (g ? `<br>${descriptionGueule(g)}` : "");
   etiquettes.push({ pos: pts[0], texte: "AVANT", type: "extremite", detail: "entre en premier" + gl(gq.avant) });
   etiquettes.push({ pos: tous[tous.length - 1], texte: "ARRIÈRE", type: "extremite", detail: "pince du chariot" + gl(gq.arriere) });
   return { groupe, etiquettes, points: tous };
