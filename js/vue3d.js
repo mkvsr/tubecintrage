@@ -258,6 +258,16 @@ export function construireMachine(prog, { zones = false, operateur = true } = {}
     forme.rotation.x = Math.PI / 2; forme.position.set(0, R, 0); groupe.add(forme);
     groupe.add(boite(-450, 0, -D * 1.2, -D / 2, -D * 0.8, D * 0.8, matCouleur(COULEURS.reglette)));
   }
+  // fin de course du chariot : face avant du chariot quand il reste la droite mini derrière le dernier pli
+  // (au-delà, il taperait dans l'outil ; pas de butée sur la machine). Plan rouge 200 × 200 mm centré sur l'axe.
+  {
+    const xFin = -m.droite_arriere_mini + 15;   // + 15 : face avant du chariot en avant de la pince (voir construireEtat)
+    const plan = new THREE.Mesh(new THREE.PlaneGeometry(200, 200),
+      new THREE.MeshBasicMaterial({ color: COULEURS.collision, transparent: true, opacity: 0.28, side: THREE.DoubleSide, depthWrite: false }));
+    plan.rotation.y = Math.PI / 2; plan.position.set(xFin, 0, 0); plan.renderOrder = 2; groupe.add(plan);
+    const bord = new THREE.LineSegments(new THREE.EdgesGeometry(plan.geometry), new THREE.LineBasicMaterial({ color: COULEURS.collision }));
+    bord.rotation.copy(plan.rotation); bord.position.copy(plan.position); groupe.add(bord);
+  }
   if (operateur) {
     const mo = matCouleur(COULEURS.operateur, { transparent: true, opacity: 0.25, depthWrite: false });
     const corps = new THREE.Mesh(new THREE.CylinderGeometry(180, 180, 1700, 24), mo);
