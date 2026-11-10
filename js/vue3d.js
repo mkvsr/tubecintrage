@@ -468,13 +468,13 @@ export class Vue3D {
     this._placer(new THREE.Vector3(-650, -1150, -H + 1830), new THREE.Vector3(0, 0, 0), false);
   }
 
-  /** Vue « Zoom » : 400 mm au-dessus de l'outil, regard vers le bas, côté opérateur en bas de l'écran.
+  /** Vue « Zoom » : 1000 mm au-dessus de l'outil, regard vers le bas, côté opérateur en bas de l'écran.
    *  Centrée entre l'axe de la forme (y = R) et l'axe du tube (y = 0) : on voit la forme et le tube qui s'y enroule. */
   vueZoom() {
     const p = this.prog;
     const R = p && p.etapes.length ? p.etapes[0].rayon : (p && p.outil ? p.outil.rayon : 150);
     // œil décalé de 1 mm vers l'opérateur : évite la vue exactement verticale (indéterminée avec camera.up = Z)
-    this._placer(new THREE.Vector3(0, R / 2 - 1, 400), new THREE.Vector3(0, R / 2, 0));
+    this._placer(new THREE.Vector3(0, R / 2 - 1, 1000), new THREE.Vector3(0, R / 2, 0));
   }
 
   recentrer() { if (this.mode === "piece") this.vuePiece(); else if (this.mode === "simulation") this.vueMachine(); }

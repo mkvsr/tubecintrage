@@ -1,6 +1,6 @@
 // Service worker : l'application reste utilisable hors connexion (atelier, tablettes).
 // Réseau d'abord (les mises à jour arrivent tout de suite), copie locale si pas de réseau.
-const CACHE = "tubecintrage-v0.6.7";
+const CACHE = "tubecintrage-v0.6.8";
 const FICHIERS = [
   "./", "index.html", "css/app.css", "manifest.webmanifest", "img/icone.svg", "img/schema_zero.svg",
   "js/app.js", "js/vue3d.js", "js/pdf.js", "js/stockage.js", "js/dialogues.js",
