@@ -192,7 +192,8 @@ function recalculer() {
   if ($("#soudAuto").checked) $("#soudAngle").value = Math.round(p.psi) % 360;
   $("#soudVal").textContent = `${Math.round(p.psi)}°`;
   etat.sim = new Simulation(p);
-  etat.images = p.etapes.length ? etat.sim.images() : [];
+  // pas deux fois plus fins que les valeurs par défaut (5° / 15° / 250 mm) : animation plus fluide
+  etat.images = p.etapes.length ? etat.sim.images({ pasAngle: 2.5, pasRotation: 7.5, pasAvance: 125 }) : [];
   afficherResultats();
   afficherListe();
   if (etat.mode === "simulation" && etat.images.length) modeSimulation(); else modePiece();
@@ -267,8 +268,8 @@ function lecture() {
   if (etat.lecture) return arreterLecture();
   if (etat.image >= etat.images.length - 1) afficherImage(0);
   const v = Number($("#vitesse").value);
-  // 180 ms par image à ×1 (deux fois plus lent que la v0.6.0, jugée trop rapide à l'atelier)
-  etat.lecture = setInterval(() => { if (etat.image >= etat.images.length - 1) arreterLecture(); else afficherImage(etat.image + 1); }, 180 / v);
+  // 90 ms par image à ×1 avec des pas deux fois plus fins : même durée qu'avant, deux fois plus d'images
+  etat.lecture = setInterval(() => { if (etat.image >= etat.images.length - 1) arreterLecture(); else afficherImage(etat.image + 1); }, 90 / v);
   $("#btLecture").textContent = "⏸";
 }
 
