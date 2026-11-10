@@ -44,7 +44,7 @@
   {
    "nom": "Bâti machine",
    "xmin": -6500,
-   "xmax": 130,
+   "xmax": 120,
    "ymin": -700,
    "ymax": 235,
    "zmin": -1200,
@@ -66,7 +66,7 @@
   {
    "nom": "Zone opérateur (pupitre)",
    "xmin": -1500,
-   "xmax": 130,
+   "xmax": 120,
    "ymin": -3000,
    "ymax": -800,
    "zmin": -1000,
@@ -75,5 +75,5 @@
    "actif": true
   }
  ],
- "publie": "2026-11-10T07:16:40.508Z"
+ "publie": "2026-11-10T07:58:58.406Z"
 }
