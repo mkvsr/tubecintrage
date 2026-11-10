@@ -78,10 +78,15 @@ function programme(t) {
   etat.progs.set(t.id, { cle, prog: p });
   return p;
 }
+// une surlongueur n'est pas un défaut : simple matière à recouper (rose, « + »), pas un avertissement (jaune, « ⚠ »)
+const estSurlong = (x) => x.niveau === ALERTE && /surlongueur/i.test(x.texte);
 const etatTube = (t) => {
   const c = etat.progs.get(t.id);
   if (!c || c.cle !== cleCalcul(t)) return null;
-  return c.prog.erreurs.length ? "erreur" : c.prog.alertes.length ? "alerte" : "ok";
+  const p = c.prog;
+  if (p.erreurs.length) return "erreur";
+  if (p.messages.some((x) => x.niveau === ALERTE && !estSurlong(x))) return "alerte";
+  return p.surlongAvant > 0 || p.surlongArriere > 0 ? "surlong" : "ok";
 };
 async function calculerTous() {
   for (const t of etat.tubes) {
@@ -145,7 +150,7 @@ function afficherListe() {
     const e = etatTube(t), li = document.createElement("li");
     li.className = [e || "", k === etat.courant ? "choisi" : "", etat.coches.has(k) ? "coche" : ""].join(" ");
     const nb = t.cintres.length;
-    li.innerHTML = `<span class="etat ${e || ""}">${{ erreur: "✖", alerte: "⚠", ok: "✔" }[e] || "…"}</span><span class="rep">${Dl.echapper(t.repere)}</span>
+    li.innerHTML = `<span class="etat ${e || ""}">${{ erreur: "✖", alerte: "⚠", surlong: "+", ok: "✔" }[e] || "…"}</span><span class="rep">${Dl.echapper(t.repere)}</span>
       <span class="nom">${Dl.echapper(t.nom)}<small>${nb} pli${nb > 1 ? "s" : ""} · ${Math.round(t.longueur)} mm · Ø${g(t.diametre)}×${g(t.epaisseur)}${t.sources.length > 1 ? " · " + t.sources.length + " pièces regroupées" : ""}</small></span>
       <span class="qte">×${t.quantite}</span>`;
     if (t.sources.length > 1) li.title = "Pièces : " + t.sources.join(", ");
@@ -157,8 +162,8 @@ function afficherListe() {
   });
   $("#videLot").classList.toggle("cache", etat.tubes.length > 0);
   const n = etat.tubes.reduce((s, t) => s + t.quantite, 0);
-  const ne = etat.tubes.filter((t) => etatTube(t) === "erreur").length, na = etat.tubes.filter((t) => etatTube(t) === "alerte").length;
-  $("#totalLot").textContent = etat.tubes.length ? `${etat.tubes.length} repère(s), ${n} pièce(s)` + (ne ? ` · ✖ ${ne}` : "") + (na ? ` · ⚠ ${na}` : "") : "";
+  const nE = (x) => etat.tubes.filter((t) => etatTube(t) === x).length, ne = nE("erreur"), na = nE("alerte"), ns = nE("surlong");
+  $("#totalLot").textContent = etat.tubes.length ? `${etat.tubes.length} repère(s), ${n} pièce(s)` + (ne ? ` · ✖ ${ne}` : "") + (na ? ` · ⚠ ${na}` : "") + (ns ? ` · + ${ns}` : "") : "";
   $("#titreLot").textContent = etat.nomLot ? "— " + etat.nomLot : "";
   document.title = "TubeCintrage" + (etat.nomLot ? " — " + etat.nomLot : "");
 }
@@ -214,7 +219,7 @@ function afficherResultats() {
     <td class="fort">${f1(e.alpha)}°</td><td>${f1(e.droiteAvant)}</td></tr>`).join("") || `<tr><td colspan="7" class="discret">Tube droit : pas de cintrage</td></tr>`;
   tb.querySelectorAll("tr[data-pli]").forEach((tr) => (tr.onclick = () => allerPli(Number(tr.dataset.pli))));
   const ul = $("#messages");
-  const items = p.messages.map((x) => `<li class="${x.niveau === ERREUR ? "erreur" : x.niveau === ALERTE ? "alerte" : "info"}">${Dl.echapper(String(x))}</li>`);
+  const items = p.messages.map((x) => `<li class="${x.niveau === ERREUR ? "erreur" : estSurlong(x) ? "surlong" : x.niveau === ALERTE ? "alerte" : "info"}">${Dl.echapper(String(x))}</li>`);
   for (const a of aVerifier(m)) items.push(`<li class="info">Paramètre machine : ${Dl.echapper(a)}</li>`);
   if (!p.messages.length) items.unshift(`<li class="ok">Aucun problème détecté</li>`);
   ul.innerHTML = items.join("");

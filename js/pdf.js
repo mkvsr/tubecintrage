@@ -7,7 +7,7 @@ import { imagePiece, imageEtat } from "./vue3d.js";
 import { gueulesDuTube, profilGueule, descriptionGueule } from "./core/gueule.js";
 
 const BLEU = "#1f3b57", GRIS = "#5d6d7e", CLAIR = "#eef2f6", ROUGE = "#b03a2e", JAUNE_TXT = "#9a6a00", TRAIT = "#c5ced8";
-const JAUNE = "#f2c14e", ROUGE_B = "#d62728";
+const JAUNE = "#f2c14e", ROUGE_B = "#d62728", ROSE = "#d6338a";
 const L = 210, H = 297, MG = 15, LU = L - 2 * MG;
 const QR_TAILLE = 24, QR_RESERVE = 34;   // QR code d'accès à la simulation (page 1, en bas à droite), mm
 
@@ -255,6 +255,14 @@ function dessinerPlan(D, m, barres, couleurs) {
   D.y += 5;
 }
 
+/** Colonne d'état de la liste de débit : ✖ erreur, ⚠ avertissement, + surlongueur à recouper (rose). */
+function etatDebit(p) {
+  if (p.erreurs.length) return { t: "✖", couleur: ROUGE };
+  if (p.messages.some((x) => x.niveau === ALERTE && !/surlongueur/i.test(x.texte))) return { t: "⚠", couleur: JAUNE_TXT };
+  if (p.surlongAvant > 0 || p.surlongArriere > 0) return { t: "+", couleur: ROSE, gras: true };
+  return { t: "" };
+}
+
 function pageDebit(D, progs, titreLot) {
   const m = progs[0].machine;
   const nP = progs.reduce((s, p) => s + p.tubeCao.quantite, 0);
@@ -270,7 +278,7 @@ function pageDebit(D, progs, titreLot) {
     const t = p.tubeCao;
     return [{ t: rep(t), fond: couleurs.get(rep(t)), gras: true }, { t: t.nom, sous: t.sources.length > 1 ? t.sources.join(", ") : null },
       String(t.quantite), `${f1(t.diametre)} × ${f1(t.epaisseur)}`, t.matiere, f1(p.longueurDebit), String(p.etapes.length),
-      { t: p.erreurs.length ? "✖" : p.alertes.length ? "⚠" : "", couleur: p.erreurs.length ? ROUGE : JAUNE_TXT }];
+      etatDebit(p)];
   }), { taille: 8.5 });
   D.y += 3;
   for (const s of sections(progs)) {
@@ -308,7 +316,7 @@ function ficheTube(D, prog, remarquesMachine) {
   D.police(20, true, BLEU); D.texte(`${f1(prog.longueurDebit)} mm`, MG + 3, y0 + 13.5);
   const sl = prog.surlongAvant || prog.surlongArriere ? `avant ${g(prog.surlongAvant)} · arrière ${g(prog.surlongArriere)} mm` : "aucune";
   D.police(8, false, GRIS); D.texte("Surlongueurs à recouper", MG + 54, y0 + 5);
-  D.police(9, true, prog.surlongAvant || prog.surlongArriere ? ROUGE : "#000000"); D.texte(sl, MG + 54, y0 + 11, { maxWidth: 44 });
+  D.police(9, true, prog.surlongAvant || prog.surlongArriere ? ROSE : "#000000"); D.texte(sl, MG + 54, y0 + 11, { maxWidth: 44 });
   D.police(8, false, GRIS); D.texte("Outillage", MG + 103, y0 + 5.5); D.police(9, true); D.texte(prog.outil ? prog.outil.nom : "—", MG + 128, y0 + 5.5);
   D.police(8, false, GRIS); D.texte("Nombre de plis", MG + 103, y0 + 14); D.police(9, true); D.texte(String(prog.etapes.length), MG + 128, y0 + 14);
   D.y = y0 + hI + 3;
@@ -374,8 +382,9 @@ function ficheTube(D, prog, remarquesMachine) {
   if (msgs.length || av.length) {
     D.titre2("Contrôles");
     for (const x of msgs) {
-      const col = x.niveau === ERREUR ? ROUGE : x.niveau === ALERTE ? JAUNE_TXT : "#34495e";
-      const sym = x.niveau === ERREUR ? "✖" : x.niveau === ALERTE ? "⚠" : "ℹ";
+      const surl = x.niveau === ALERTE && /surlongueur/i.test(x.texte);   // matière à recouper : rose « + », pas un avertissement
+      const col = x.niveau === ERREUR ? ROUGE : surl ? ROSE : x.niveau === ALERTE ? JAUNE_TXT : "#34495e";
+      const sym = x.niveau === ERREUR ? "✖" : surl ? "+" : x.niveau === ALERTE ? "⚠" : "ℹ";
       D.besoin(5);
       D.police(8.5, false, col); D.texte(sym, MG, D.y + 3);
       D.y += D.para(String(x), MG + 5, D.y, LU - 5, 8.5, false, "#000000") + 1;

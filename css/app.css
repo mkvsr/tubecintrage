@@ -2,6 +2,7 @@
   --bleu: #1f3b57; --bleu2: #2c5378; --accent: #e08a2e; --fond: #e9edf2; --carte: #ffffff;
   --texte: #1b2631; --discret: #5d6d7e; --trait: #d3dae2; --clair: #eef2f6;
   --erreur: #b03a2e; --alerte: #9a6a00; --ok: #2e7d32; --jaune: #f2c14e; --rouge: #d62728;
+  --surlong: #d6338a;   /* rose des surlongueurs (plus foncé que le rose 3D pour rester lisible sur fond blanc) */
   --rayon: 8px; --cible: 40px;
   font-family: "Segoe UI", system-ui, -apple-system, Roboto, "DejaVu Sans", sans-serif;
   color: var(--texte); background: var(--fond);
@@ -63,11 +64,12 @@ button:disabled { opacity: .45; cursor: default; }
 .liste li.coche { box-shadow: inset 3px 0 0 var(--accent); }
 .liste .etat { text-align: center; font-weight: 700; }
 .liste .etat.erreur { color: var(--erreur); } .liste .etat.alerte { color: var(--alerte); } .liste .etat.ok { color: var(--ok); }
+.liste .etat.surlong { color: var(--surlong); font-size: 18px; }
 .liste .rep { font-weight: 700; color: var(--bleu); font-variant-numeric: tabular-nums; }
 .liste .nom { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .liste .nom small { display: block; color: var(--discret); font-size: 12px; }
 .liste .qte { font-weight: 600; font-variant-numeric: tabular-nums; }
-.liste li.erreur .nom { color: var(--erreur); } .liste li.alerte .nom { color: var(--alerte); }
+.liste li.erreur .nom { color: var(--erreur); } .liste li.alerte .nom { color: var(--alerte); } .liste li.surlong .nom { color: var(--surlong); }
 .vide { border: 2px dashed var(--trait); border-radius: 8px; padding: 18px; text-align: center; }
 .vide p { margin: 4px 0; }
 
@@ -87,7 +89,7 @@ button:disabled { opacity: .45; cursor: default; }
 /* ---------- résultat */
 .resume { font-size: 14px; line-height: 1.45; margin-bottom: 8px; }
 .resume .debit { font-size: 22px; font-weight: 700; color: var(--bleu); }
-.resume .surlong { color: var(--erreur); }
+.resume .surlong { color: var(--surlong); }
 .table-defile { overflow: auto; }
 table.programme { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
 .programme th { font-size: 11px; text-transform: uppercase; color: #fff; background: var(--bleu); padding: 6px 4px; font-weight: 600; }
@@ -102,6 +104,7 @@ table.programme { width: 100%; border-collapse: collapse; font-variant-numeric: 
 .messages li::before { position: absolute; left: 2px; top: 4px; font-weight: 700; }
 .messages li.erreur { color: var(--erreur); } .messages li.erreur::before { content: "✖"; }
 .messages li.alerte { color: var(--alerte); } .messages li.alerte::before { content: "⚠"; }
+.messages li.surlong { color: var(--surlong); } .messages li.surlong::before { content: "+"; font-size: 15px; top: 2px; }
 .messages li.info { color: var(--discret); } .messages li.info::before { content: "ℹ"; }
 .messages li.ok { color: var(--ok); } .messages li.ok::before { content: "✔"; }
 
