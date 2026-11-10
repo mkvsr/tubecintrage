@@ -343,7 +343,13 @@ export function analyserMaillage(mesh) {
 
 const longueurSeg = (s) => (s.type === "ligne" ? norm(sub(s.p1, s.p0)) : (norm(sub(s.p1, s.p0)) || s.rayon));
 
-/** Lit un STEP (ArrayBuffer). Renvoie {tubes, rapport}. */
+const fmt = (x) => String(Math.round(x * 10) / 10).replace(".", ",");
+const LONGUEUR_MINI_FILTRE = 150;   // mm : plus court qu'un mors, ce n'est pas un tube à cintrer
+
+/** Lit un STEP (ArrayBuffer). Renvoie {tubes, rapport}.
+ *  options.diametresOutils : diamètres des outils déclarés. Si fourni, seuls les solides à l'un de ces diamètres
+ *  (± 0,5 mm) et d'au moins 150 mm sont gardés : les renforts d'un assemblage sont écartés. Si aucun solide ne
+ *  correspond, tout est gardé (nouveau diamètre sans outil) avec une remarque. */
 export async function chargerStep(buffer, nomFichier = "piece.step", options = {}) {
   const occt = await obtenirOcct(options);
   const r = occt.ReadStepFile(new Uint8Array(buffer), {
@@ -353,14 +359,35 @@ export async function chargerStep(buffer, nomFichier = "piece.step", options = {
   const piece = nomFichier.replace(/\.[^.]+$/, "");
   const tubes = [], rapport = [];
   const meshes = r.meshes;
-  meshes.forEach((mesh, k) => {
-    const nomS = meshes.length > 1 ? `${piece} – corps ${k + 1}` : piece;
-    const res = analyserMaillage(mesh);
-    if (!res) { rapport.push(`${nomS} : pas de face cylindrique ou torique, ignoré`); return; }
+  // nom de la pièce dans l'assemblage (fourni par OpenCascade) ; sinon « fichier – corps k » (pièce multicorps)
+  const generique = (n) => !n || !n.trim() || /^Open CASCADE STEP translator/i.test(n);
+  const vus = new Map();
+  const noms = meshes.map((mesh, k) => {
+    if (generique(mesh.name)) return meshes.length > 1 ? `${piece} – corps ${k + 1}` : piece;
+    const n = mesh.name.trim(), c = (vus.get(n) || 0) + 1; vus.set(n, c);
+    return c > 1 ? `${n} (${c})` : n;
+  });
+  const analyses = meshes.map((mesh, k) => ({ nomS: noms[k], res: analyserMaillage(mesh) }));
+  // filtre des renforts : diamètre d'un outil déclaré
+  const diams = options.diametresOutils?.length ? options.diametresOutils : null;
+  const auDiametre = (res) => diams.some((d) => Math.abs(d - res.diametre) <= 0.5);
+  const filtrer = !!diams && analyses.some((a) => a.res && auDiametre(a.res));
+  if (diams && !filtrer && analyses.some((a) => a.res))
+    rapport.push(`aucun solide au diamètre d'un outil déclaré (${diams.map((d) => "Ø" + fmt(d)).join(", ")}) : tous les solides sont gardés`);
+  const ecartes = [];
+  analyses.forEach(({ nomS, res }) => {
+    if (!res) { (filtrer ? ecartes : rapport).push(filtrer ? `${nomS} (pas de forme de tube)` : `${nomS} : pas de face cylindrique ou torique, ignoré`); return; }
+    if (filtrer && !auDiametre(res)) { ecartes.push(`${nomS} (Ø${fmt(res.diametre)})`); return; }
     rapport.push(...res.rem.map((x) => `${nomS} : ${x}`));
     let ep = res.epaisseur;
     if (ep == null) { rapport.push(`${nomS} : tube plein ou épaisseur non trouvée, 2 mm par défaut`); ep = 2.0; }
-    const chaines = chainer(res.segs, true, 0.5).filter((c) => c.reduce((s, x) => s + longueurSeg(x), 0) > 1);
+    let chaines = chainer(res.segs, true, 0.5).filter((c) => c.reduce((s, x) => s + longueurSeg(x), 0) > 1);
+    if (filtrer) {
+      const L = (c) => c.reduce((s, x) => s + longueurSeg(x), 0);
+      const courts = chaines.filter((c) => L(c) < LONGUEUR_MINI_FILTRE);
+      if (courts.length) ecartes.push(`${nomS} (${courts.map((c) => fmt(L(c)) + " mm").join(", ")} : trop court)`);
+      chaines = chaines.filter((c) => L(c) >= LONGUEUR_MINI_FILTRE);
+    }
     if (chaines.length > 1) rapport.push(`${nomS} : ${chaines.length} tronçons non raccordés (coupes, gueules de loup ou angles vifs) traités comme des tubes séparés`);
     chaines.forEach((ch, j) => {
       const nom = nomS + (chaines.length > 1 ? ` – T${j + 1}` : "");
@@ -370,6 +397,7 @@ export async function chargerStep(buffer, nomFichier = "piece.step", options = {
       } catch (e) { rapport.push(`${nom} : ${e.message}`); }
     });
   });
+  if (ecartes.length) rapport.push(`pièces écartées (renforts, pas d'outil à ce diamètre ou trop courtes) : ${ecartes.join(", ")}`);
   if (!meshes.length) throw new ErreurStep("Aucun solide dans le fichier STEP");
   return { tubes, rapport };
 }

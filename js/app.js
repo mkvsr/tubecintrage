@@ -119,7 +119,8 @@ async function lireFichiers(fichiers, remplacer) {
     try {
       const estStep = /\.(step|stp)$/i.test(f.name);
       const contenu = estStep ? await f.arrayBuffer() : await f.text();
-      const r = await chargerFichier(f.name, contenu);
+      // STEP d'assemblage : seuls les solides au diamètre d'un outil déclaré sont gardés (renforts écartés)
+      const r = await chargerFichier(f.name, contenu, { diametresOutils: (etat.machine?.outils || []).map((o) => o.diametre) });
       if (/\.tclot$/i.test(f.name)) lotNom = r.nom || f.name.replace(/\.tclot$/i, "");
       else for (const t of r.tubes) if (!t.sources.length) t.sources = [t.nom];
       nouveaux.push(...r.tubes); rapport.push(...r.rapport);
