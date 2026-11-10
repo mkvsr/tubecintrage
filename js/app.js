@@ -267,7 +267,8 @@ function lecture() {
   if (etat.lecture) return arreterLecture();
   if (etat.image >= etat.images.length - 1) afficherImage(0);
   const v = Number($("#vitesse").value);
-  etat.lecture = setInterval(() => { if (etat.image >= etat.images.length - 1) arreterLecture(); else afficherImage(etat.image + 1); }, 90 / v);
+  // 180 ms par image à ×1 (deux fois plus lent que la v0.6.0, jugée trop rapide à l'atelier)
+  etat.lecture = setInterval(() => { if (etat.image >= etat.images.length - 1) arreterLecture(); else afficherImage(etat.image + 1); }, 180 / v);
   $("#btLecture").textContent = "⏸";
 }
 
