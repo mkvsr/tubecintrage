@@ -63,7 +63,7 @@ class Doc {
   entete(titre, sous, soustitre2 = null) {
     const h = soustitre2 ? 21 : 16;
     // page 1 : bandeau raccourci, le QR code de la simulation est à sa droite (voir qrSimulation)
-    const p1 = this.page === 1, W = p1 ? LU - QR_TAILLE - 4 : LU;
+    const p1 = this.page === 1 && !this.sansQr, W = p1 ? LU - QR_TAILLE - 4 : LU;
     this.rect(MG, this.y, W, h, BLEU);
     let tp = 14;
     this.police(tp, true, "#ffffff");
@@ -474,17 +474,21 @@ export async function dossierPdf(progs, { titreLot = "", progression = null, lie
  *  trait de coupe en haut, bande de 50 mm en dessous pour l'enrouler, repère de la soudure au milieu.
  *  Gauche → droite = sens antihoraire vu depuis le bout du tube (gabarit enroulé face imprimée vers l'extérieur,
  *  trait de coupe vers le bout). */
-function pageGabarits(D, prog) {
+function pageGabarits(D, prog, { seul = true } = {}) {
   const t = prog.tubeCao, gq = gueulesDuTube(prog.tube);
   const bouts = [["AVANT", "entre en premier dans la machine", gq.avant, true], ["ARRIÈRE", "côté pince du chariot", gq.arriere, false]]
     .filter((b) => b[2]);
   if (!bouts.length) return;
   const SV = new Simulation(prog, 12).cadSoudure;
   const r = prog.tube.diametre / 2, W = Math.PI * prog.tube.diametre, BANDE = 50;
-  D.nouvellePage();
-  D.entete(`Gabarits de gueule de loup — ${t.repere ? t.repere + " · " : ""}${t.nom}`,
-    "Imprimer à 100 % (taille réelle, sans ajustement). Découper sur le trait noir, enrouler face imprimée vers l'extérieur,",
-    "trait de coupe côté bout du tube, repère SOUDURE sur la soudure ; tracer, puis meuler jusqu'au trait.");
+  if (seul) {   // dossier complet : une page par tube, avec son bandeau
+    D.nouvellePage();
+    D.entete(`Gabarits de gueule de loup — ${t.repere ? t.repere + " · " : ""}${t.nom}`, MODE_EMPLOI_GABARIT[0], MODE_EMPLOI_GABARIT[1]);
+  } else {      // export « gabarits seuls » : les tubes s'enchaînent, plusieurs par page si la place le permet
+    D.besoin(14 + BANDE);
+    D.titre2(`${t.repere ? t.repere + " — " : ""}${t.nom} · Ø${f1(prog.tube.diametre)} × ${f1(prog.tube.epaisseur)}` +
+      (t.quantite > 1 ? ` · ${t.quantite} pièces (un gabarit sert pour toutes)` : ""));
+  }
   if (W > L - 10) { D.para(`Tube Ø${f1(prog.tube.diametre)} : développé de ${f1(W)} mm, plus large que la page A4 — gabarit non imprimable.`, MG, D.y, LU, 9, true, ROUGE); return; }
   for (const [nom, detail, g, avant] of bouts) {
     const ref = avant ? SV[0] : SV[SV.length - 1];
@@ -518,7 +522,29 @@ function pageGabarits(D, prog) {
     D.texte(`${t.repere || t.nom} · Ø${f1(prog.tube.diametre)}`, X(0) + r * Math.PI / 2, yb - 10, { align: "center" });
     D.y = yb + 6;
   }
-  // contrôle de l'échelle d'impression
+  if (seul) controleEchelle(D);
+}
+
+const MODE_EMPLOI_GABARIT = [
+  "Imprimer à 100 % (taille réelle, sans ajustement). Découper sur le trait noir, enrouler face imprimée vers l'extérieur,",
+  "trait de coupe côté bout du tube, repère SOUDURE sur la soudure ; tracer, puis meuler jusqu'au trait.",
+];
+
+/** Export séparé : uniquement les gabarits de gueule de loup du lot, à imprimer. */
+export async function gabaritsPdf(progs, { titreLot = "" } = {}) {
+  const avec = progs.filter((p) => { const g = gueulesDuTube(p.tube); return g.avant || g.arriere; });
+  const D = new Doc(window.jspdf.jsPDF, await polices());
+  D.sansQr = true;   // pas de QR code : bandeau de la page 1 sur toute la largeur
+  D.d.setProperties({ title: "Gabarits de gueule de loup" + (titreLot ? " — " + titreLot : ""), creator: "TubeCintrage" });
+  D.entete("Gabarits de gueule de loup" + (titreLot ? ` — ${titreLot}` : ""), MODE_EMPLOI_GABARIT[0], MODE_EMPLOI_GABARIT[1]);
+  controleEchelle(D);
+  for (const p of avec) pageGabarits(D, p, { seul: false });
+  D.pieds();
+  return D.d.output("blob");
+}
+
+/** Trait de 100 mm pour vérifier que l'impression est à l'échelle 1. */
+function controleEchelle(D) {
   D.besoin(12);
   D.d.setDrawColor("#000000"); D.d.setLineWidth(0.4);
   const xr = MG, yr = D.y + 3;

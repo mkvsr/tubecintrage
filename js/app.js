@@ -17,7 +17,7 @@ const pause = () => new Promise((r) => setTimeout(r, 0));
 const ICONES = {
   ouvrir: "M3 7h6l2 2h10v10H3z", ajouter: "M12 5v14M5 12h14", lots: "M4 5h16v4H4zM4 11h16v4H4zM4 17h16v3H4z",
   enregistrer: "M5 4h11l3 3v13H5zM8 4v5h8V4M8 20v-6h8v6", publier: "M12 16V4M7 9l5-5 5 5M5 20h14", points: "M4 20 12 4l8 16M8 13h8",
-  pdfTous: "M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h7", pdfTube: "M6 3h9l4 4v14H6zM14 3v5h5", csv: "M4 4h16v16H4zM4 10h16M4 15h16M10 4v16", etiquettes: "M3 12V4h8l10 10-8 8zM7.5 8.5h.01",
+  pdfTous: "M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h7", pdfTube: "M6 3h9l4 4v14H6zM14 3v5h5", csv: "M4 4h16v16H4zM4 10h16M4 15h16M10 4v16", etiquettes: "M3 12V4h8l10 10-8 8zM7.5 8.5h.01", gabarits: "M6 7a3 3 0 1 0 0-.01M6 17a3 3 0 1 0 0 .01M8.5 8.5 20 18M8.5 15.5 20 6",
   parametres: "M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1",
   etalonnage: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 11v2",
 };
@@ -406,6 +406,18 @@ const actions = {
       St.telecharger(`Etiquettes ${etat.nomLot || "lot"}.pdf`.replace(/[\\/:*?"<>|]+/g, "_"), blob, "application/pdf");
       toast(`${pieces.length} étiquette(s) créée(s)`, 3000);
     } catch (e) { console.error(e); Dl.message("Étiquettes", "Échec : " + e.message); }
+  },
+  async gabarits() {
+    const tubes = etat.tubes.filter((t) => t.quantite > 0 && t.gueules?.length);
+    if (!tubes.length) return Dl.message("Gabarits",
+      "Aucun tube de ce lot n'a de gueule de loup ni de coupe d'about.\n\nLes coupes sont lues à l'import d'un assemblage STEP : si le lot a été créé avant, réimportez le STEP.");
+    try {
+      const { gabaritsPdf } = await import("./pdf.js");
+      if (!window.jspdf) throw new Error("Module PDF non chargé (vendor/jspdf.umd.min.js)");
+      const blob = await gabaritsPdf(tubes.map(programme), { titreLot: etat.nomLot || "" });
+      St.telecharger(`Gabarits ${etat.nomLot || "lot"}.pdf`.replace(/[\\/:*?"<>|]+/g, "_"), blob, "application/pdf");
+      toast(`Gabarits de ${tubes.length} repère(s) créés — imprimer à 100 %`, 4000);
+    } catch (e) { console.error(e); Dl.message("Gabarits", "Échec : " + e.message); }
   },
   async csv() {
     if (!etat.tubes.length) return toast("Le lot est vide");
