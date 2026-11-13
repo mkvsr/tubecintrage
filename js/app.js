@@ -445,6 +445,17 @@ const actions = {
 };
 document.querySelectorAll("[data-action]").forEach((b) => (b.onclick = () => actions[b.dataset.action]()));
 
+// Tablette (≤ 1400 px) : le lecteur de la simulation (lecture, pli suivant…) passe en bas de la colonne de gauche,
+// toujours visible ; sous la vue 3D il pouvait être caché sous l'afficheur Y / B.
+const mqTablette = matchMedia("(max-width: 1400px)");
+const placerLecteur = () => {
+  const l = $("#lecteur"), cible = mqTablette.matches ? $(".colonne.gauche") : $(".colonne.droite");
+  if (l.parentElement !== cible) cible.appendChild(l);
+  l.classList.toggle("lecteur-gauche", mqTablette.matches);
+};
+mqTablette.addEventListener("change", placerLecteur);
+placerLecteur();
+
 // Menu de la barre bleue plié / déplié : plus de place pour la vue 3D sur tablette.
 // Par défaut plié sur écran tactile ; le choix est retenu par appareil.
 const CLE_MENU = "tubecintrage.menuPlie";

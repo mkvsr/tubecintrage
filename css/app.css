@@ -148,6 +148,12 @@ table.programme { width: 100%; border-collapse: collapse; font-variant-numeric: 
 .lecteur { display: flex; align-items: center; gap: 6px; background: var(--carte); border-radius: var(--rayon); padding: 6px; }
 .lecteur button { min-width: 44px; font-size: 16px; }
 .lecteur input[type=range] { flex: 1; min-width: 80px; height: 30px; }
+/* tablette : lecteur en bas de la colonne de gauche, collé en bas pendant le défilement */
+.lecteur.lecteur-gauche { position: sticky; bottom: 0; z-index: 3; flex-wrap: wrap; justify-content: center;
+  box-shadow: 0 -3px 10px rgba(20,40,60,.18); border: 1px solid var(--trait); }
+.lecteur.lecteur-gauche input[type=range] { order: 10; flex-basis: 100%; }
+.lecteur.lecteur-gauche button { min-width: 40px; padding: 0 8px; }
+.lecteur.lecteur-gauche select { padding: 0 6px; }
 
 .statut { font-size: 12px; color: var(--discret); padding: 4px 12px 6px; }
 .statut b { color: var(--texte); }
