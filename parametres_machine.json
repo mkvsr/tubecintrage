@@ -25,7 +25,7 @@
    "nom": "Ø48,3 R145",
    "diametre": 48.3,
    "rayon": 145,
-   "droite_mini": 150,
+   "droite_mini": 115,
    "pre_extraction": 5,
    "vitesse": 100
   }
@@ -75,5 +75,5 @@
    "actif": true
   }
  ],
- "publie": "2026-11-10T08:38:33.753Z"
+ "publie": "2026-11-25T15:37:26.895Z"
 }
