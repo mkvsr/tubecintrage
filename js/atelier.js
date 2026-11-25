@@ -176,18 +176,18 @@ export async function publierLot(nom, texteLot, mdp, resume = {}) {
   if (e) { const f = await lireFichierDepot(`lots/${e.id}.tcx`); shaLot = f?.sha; }
   else { e = { id: nouvelId(), nom }; index.lots.push(e); }
   Object.assign(e, resume, { modifie: new Date().toISOString() });
-  await ecrireFichierDepot(`lots/${e.id}.tcx`, await chiffrer(texteLot, mdp), `Lot « ${nom} »`, shaLot);
-  await ecrireFichierDepot("lots/index.tcx", await chiffrer(JSON.stringify(index), mdp), `Liste des lots (${nom})`, sha);
+  // messages d'envoi : jamais le nom du lot (l'historique du dépôt public est lisible par tous), seulement son id aléatoire
+  await ecrireFichierDepot(`lots/${e.id}.tcx`, await chiffrer(texteLot, mdp), `Lot ${e.id}`, shaLot);
+  await ecrireFichierDepot("lots/index.tcx", await chiffrer(JSON.stringify(index), mdp), "Liste des lots", sha);
   return e;
 }
 
 export async function supprimerPublie(id, mdp) {
   const { index, sha } = await lireIndexDepot(mdp);
-  const e = index.lots.find((l) => l.id === id);
   index.lots = index.lots.filter((l) => l.id !== id);
-  await ecrireFichierDepot("lots/index.tcx", await chiffrer(JSON.stringify(index), mdp), `Retrait du lot « ${e ? e.nom : id} »`, sha);
+  await ecrireFichierDepot("lots/index.tcx", await chiffrer(JSON.stringify(index), mdp), `Retrait du lot ${id}`, sha);
   const f = await lireFichierDepot(`lots/${id}.tcx`);
-  if (f) await supprimerFichierDepot(`lots/${id}.tcx`, f.sha, `Retrait du lot « ${e ? e.nom : id} »`);
+  if (f) await supprimerFichierDepot(`lots/${id}.tcx`, f.sha, `Retrait du lot ${id}`);
 }
 
 /** Le mot de passe ouvre-t-il l'index déjà publié ? (true aussi s'il n'y a encore rien) */
