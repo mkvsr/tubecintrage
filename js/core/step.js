@@ -5,7 +5,8 @@
 import { add, sub, mul, dot, cross, norm, unit, angleEntre, neg } from "./vec.js";
 import { chainer } from "./importation.js";
 import { tubeDepuisSegments } from "./geometrie.js";
-import { chercherGueule, mesurerCoupe, descriptionGueule } from "./gueule.js";
+import { chercherGueule, chercherPlan, mesurerCoupe, descriptionGueule } from "./gueule.js";
+import { Profil, analyserProfil, mesurerCoupeProfil, chercherCoupeProfil, facesExterieures, descriptionCoupeProfil } from "./profil.js";
 
 export class ErreurStep extends Error {}
 
@@ -423,6 +424,9 @@ export async function chargerStep(buffer, nomFichier = "piece.step", options = {
     return c > 1 ? `${n} (${c})` : n;
   });
   const analyses = meshes.map((mesh, k) => ({ nomS: noms[k], res: analyserMaillage(mesh) }));
+  // tubes rectangulaires / carrés droits (non cintrés) : reconnus à part, jamais filtrés par les outils de cintrage
+  const sectionsProfil = meshes.map((mesh) => analyserProfil(mesh));
+  const profils = [];
   // filtre des renforts : diamètre d'un outil déclaré
   const diams = options.diametresOutils?.length ? options.diametresOutils : null;
   const auDiametre = (res) => diams.some((d) => Math.abs(d - res.diametre) <= 0.5);
@@ -431,6 +435,13 @@ export async function chargerStep(buffer, nomFichier = "piece.step", options = {
     rapport.push(`aucun solide au diamètre d'un outil déclaré (${diams.map((d) => "Ø" + fmt(d)).join(", ")}) : tous les solides sont gardés`);
   const ecartes = [], solideDe = new Map();
   analyses.forEach(({ nomS, res }, kSolide) => {
+    const sp = sectionsProfil[kSolide];
+    if (sp) {
+      const p = new Profil(nomS, sp, options.matiere || "Acier");
+      profils.push(p); solideDe.set(p, kSolide);
+      rapport.push(`${nomS} : ${p.nomSection}, ${fmt(p.longueur)} mm (tube droit, non cintré)`);
+      return;
+    }
     if (!res) { (filtrer ? ecartes : rapport).push(filtrer ? `${nomS} (pas de forme de tube)` : `${nomS} : pas de face cylindrique ou torique, ignoré`); return; }
     if (filtrer && !auDiametre(res)) { ecartes.push(`${nomS} (Ø${fmt(res.diametre)})`); return; }
     rapport.push(...res.rem.map((x) => `${nomS} : ${x}`));
@@ -459,8 +470,10 @@ export async function chargerStep(buffer, nomFichier = "piece.step", options = {
   analyses.forEach(({ nomS, res }, k) => {
     // tubulaire : rond plein, ou paroi mince devant le rayon (une tôle à découpes arrondies donne une « épaisseur » énorme)
     const tubulaire = !res || res.epaisseur == null || res.epaisseur <= 0.5 * (res.diametre / 2);
-    if (res) for (const s of res.segs) if (s.type === "ligne") cylindres.push({ p0: s.p0, p1: s.p1, rayon: res.diametre / 2, piece: nomS, k, tubulaire });
+    if (res && !sectionsProfil[k]) for (const s of res.segs) if (s.type === "ligne") cylindres.push({ p0: s.p0, p1: s.p1, rayon: res.diametre / 2, piece: nomS, k, tubulaire });
   });
+  // faces extérieures des tubes carrés : un tube (rond ou carré) qui arrive dessus en biais y prend une coupe plane
+  const plans = profils.flatMap((p) => facesExterieures(p, p.nom).map((f) => ({ ...f, k: solideDe.get(p) })));
   // 1) coupe déjà modélisée sur la pièce (gueule de loup, coupe biaise…) : mesurée sur le maillage, prioritaire ;
   // 2) sinon, bout droit qui arrive sur un autre tube : coupe calculée contre ce tube.
   const dirDe = (e) => { try { return e.direction || null; } catch { return null; } };   // null pour un cintre
@@ -473,7 +486,9 @@ export async function chargerStep(buffer, nomFichier = "piece.step", options = {
   const mesurer = (mesh, t, E, d, L) => mesurerCoupe(mesh.attributes.position.array, mesh.index.array, E, d, t.diametre / 2, L);
   // le maillage de l'analyse est grossier (17°) : s'il y a une coupe modélisée, on la remesure sur un maillage fin
   let fins = null;
-  if (tubes.some((t) => boutsDe(t).some(([, E, d, L]) => mesurer(meshes[solideDe.get(t)], t, E, d, L)))) {
+  const mesurerP = (mesh, p, auDebut) => mesurerCoupeProfil(mesh.attributes.position.array, mesh.index.array, p, auDebut);
+  if (tubes.some((t) => boutsDe(t).some(([, E, d, L]) => mesurer(meshes[solideDe.get(t)], t, E, d, L))) ||
+      profils.some((p) => [true, false].some((deb) => mesurerP(meshes[solideDe.get(p)], p, deb)))) {
     const rf = occt.ReadStepFile(new Uint8Array(buffer), {
       linearUnit: "millimeter", linearDeflectionType: "absolute_value", linearDeflection: 0.05, angularDeflection: 0.05,
     });
@@ -484,13 +499,25 @@ export async function chargerStep(buffer, nomFichier = "piece.step", options = {
     t.gueules = [];
     const notes = [];
     for (const [cote, E, d, L] of boutsDe(t)) {
-      const voisin = chercherGueule(E, d, t.diametre / 2, autres);
+      const voisin = chercherGueule(E, d, t.diametre / 2, autres) || chercherPlan(E, d, t.diametre / 2, plans.filter((f) => f.k !== k));
       let g = mesurer((fins || meshes)[k], t, E, d, L);
       if (g) g.piece = voisin?.piece || ""; else g = voisin;
       if (g) { t.gueules.push(g); notes.push(`${cote} : ${descriptionGueule(g)}`); }
     }
     if (notes.length) rapport.push(`${t.nom} : ${notes.join(" ; ")} — affichée en orange, gabarit dans le dossier PDF`);
   }
+  for (const p of profils) {
+    const k = solideDe.get(p), cyl = cylindres.filter((c) => c.k !== k), pl = plans.filter((f) => f.k !== k);
+    p.gueules = [];
+    const notes = [];
+    for (const [cote, auDebut] of [["bout 1", true], ["bout 2", false]]) {
+      const voisin = chercherCoupeProfil(p, auDebut, cyl, pl);
+      let g = mesurerP((fins || meshes)[k], p, auDebut);
+      if (g) g.piece = voisin?.piece || ""; else g = voisin;
+      if (g) { p.gueules.push(g); notes.push(`${cote} : ${descriptionCoupeProfil(g, p)}`); }
+    }
+    if (notes.length) rapport.push(`${p.nom} : ${notes.join(" ; ")} — affichée en orange, gabarit dans le dossier PDF`);
+  }
   if (!meshes.length) throw new ErreurStep("Aucun solide dans le fichier STEP");
-  return { tubes, rapport };
+  return { tubes: [...tubes, ...profils], rapport };
 }

@@ -3,6 +3,7 @@
 import { sub, cross, unit, norm, neg, angleEntre } from "./vec.js";
 import { tubeDepuisSegments, tubeDepuisPoints, TOL_POINT, TOL_TANGENCE, Droite } from "./geometrie.js";
 import { gueuleVersJson, gueuleDepuisJson } from "./gueule.js";
+import { profilVersJson, profilDepuisJson } from "./profil.js";
 
 export class ErreurImport extends Error {}
 
@@ -142,7 +143,9 @@ function segmentsDe(tube) {
 export function lotVersTexte(tubes, nom = "") {
   return JSON.stringify({
     format: FORMAT_LOT, nom,
-    tubes: tubes.map((t) => ({ nom: t.nom, repere: t.repere, quantite: t.quantite, diametre: t.diametre,
+    // tubes carrés / rectangulaires : clé « profils » à part (ignorée par l'ancienne version, format inchangé)
+    ...(tubes.some((t) => t.estProfil) ? { profils: tubes.filter((t) => t.estProfil).map(profilVersJson) } : {}),
+    tubes: tubes.filter((t) => !t.estProfil).map((t) => ({ nom: t.nom, repere: t.repere, quantite: t.quantite, diametre: t.diametre,
       epaisseur: t.epaisseur, matiere: t.matiere, sources: t.sources, reglages: t.reglages, segments: segmentsDe(t),
       ...(t.gueules?.length ? { gueules: t.gueules.map(gueuleVersJson) } : {}) })),
   }, null, 1);
@@ -160,6 +163,9 @@ export function chargerLot(texte) {
       t.gueules = (x.gueules || []).map(gueuleDepuisJson);
       tubes.push(t);
     } catch (e) { rapport.push(`${x.nom} : ${e.message}`); }
+  }
+  for (const x of d.profils || []) {
+    try { tubes.push(profilDepuisJson(x)); } catch (e) { rapport.push(`${x.nom} : ${e.message}`); }
   }
   return { tubes, rapport, nom: d.nom || "" };
 }

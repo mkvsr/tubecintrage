@@ -21,11 +21,12 @@ export const gueule = (E, d, r, C, a, Rm, piece) => ({ type: "calcul", E, d: uni
 export const gueuleMesuree = (E, d, r, w0, prof, piece = "") => ({ type: "mesure", E, d: unit(d), r, w0: unit(w0), prof, piece });
 
 /** Angle entre les deux axes (°, 0 à 90) ; null pour une coupe mesurée. */
-export const angleGueule = (g) => (g.type === "mesure" ? null : (Math.acos(Math.min(1, Math.abs(dot(g.d, g.a)))) * 180) / Math.PI);
+export const angleGueule = (g) => (g.type === "mesure" || g.type === "plan" ? null :(Math.acos(Math.min(1, Math.abs(dot(g.d, g.a)))) * 180) / Math.PI);
 
 /** Texte court pour les étiquettes et le PDF. */
 export function descriptionGueule(g) {
   if (g.type === "mesure") return `coupe modélisée (profondeur ${fmt(profondeurGueule(g))} mm)` + (g.piece ? ` contre ${g.piece}` : "");
+  if (g.type === "plan") return `coupe biaise contre une face de ${g.piece || "tube carré"} (profondeur ${fmt(profondeurGueule(g))} mm)`;
   return `gueule de loup sur Ø${fmt(2 * g.Rm)} à ${fmt(angleGueule(g))}°` + (g.piece ? ` (${g.piece})` : "");
 }
 
@@ -48,6 +49,21 @@ export function chercherGueule(E, d, r, cylindres) {
     if (dist < bestD) { bestD = dist; best = gueule(E, d, r, c.p0, a, c.rayon, c.piece); }
   }
   return best;
+}
+
+/** Bout de tube rond qui arrive sur la face plane d'un tube carré : coupe plane (biaise). null si le bout est
+ *  perpendiculaire à la face (coupe droite) ou ne touche aucune face. plans : faces de facesExterieures (profil.js). */
+export function chercherPlan(E, d, r, plans) {
+  let best = null, bestH = Infinity;
+  for (const p of plans) {
+    const h = dot(p.N, sub(E, p.P0));
+    if (h > 0.5 || h < -p.epaisseurMax) continue;
+    const loc = sub(E, mul(p.N, h));
+    if (Math.abs(dot(sub(loc, p.c), p.e1)) > p.h1 + 1 || Math.abs(dot(sub(loc, p.c), p.e2)) > p.h2 + 1) continue;
+    if (Math.abs(dot(p.N, d)) > 0.999) continue;
+    if (Math.abs(h) < bestH) { bestH = Math.abs(h); best = { type: "plan", E, d: unit(d), r, P0: p.P0, N: p.N, piece: p.piece }; }
+  }
+  return best && profondeurGueule(best) >= PROFONDEUR_MINI ? best : null;
 }
 
 /** Vecteur ⟂ à d, fixe (origine des angles du profil mesuré). */
@@ -132,6 +148,10 @@ export function reculGueule(g, ref, theta) {
     const x = ((th + Math.PI) / (2 * Math.PI)) * g.prof.length, k = Math.floor(x), f = x - k, n = g.prof.length;
     return g.prof[((k % n) + n) % n] * (1 - f) + g.prof[(k + 1) % n] * f;
   }
+  if (g.type === "plan") {
+    const M = add(g.E, mul(u, g.r)), nd = dot(g.N, g.d);
+    return Math.abs(nd) < 1e-9 ? 0 : Math.min(0, -dot(g.N, sub(M, g.P0)) / nd);
+  }
   const w0 = sub(add(g.E, mul(u, g.r)), g.C);
   const w0p = sub(w0, mul(g.a, dot(w0, g.a))), dp = sub(g.d, mul(g.a, dot(g.d, g.a)));
   const A = dot(dp, dp), B = 2 * dot(w0p, dp), Cq = dot(w0p, w0p) - g.Rm * g.Rm;
@@ -169,7 +189,9 @@ export function gueulesDuTube(tube) {
 const r3 = (v) => v.map((x) => Math.round(x * 1000) / 1000);
 export function gueuleVersJson(g) {
   if (g.type === "mesure") return { type: "mesure", E: r3(g.E), d: r3(g.d), r: g.r, w0: r3(g.w0), prof: g.prof.map((z) => Math.round(z * 100) / 100), piece: g.piece || "" };
+  if (g.type === "plan") return { type: "plan", E: r3(g.E), d: r3(g.d), r: g.r, P0: r3(g.P0), N: r3(g.N), piece: g.piece || "" };
   return { E: r3(g.E), d: r3(g.d), r: g.r, C: r3(g.C), a: r3(g.a), Rm: g.Rm, piece: g.piece || "" };
 }
 export const gueuleDepuisJson = (x) => (x.type === "mesure" ? gueuleMesuree(x.E, x.d, x.r, x.w0, x.prof, x.piece)
+  : x.type === "plan" ? { type: "plan", E: x.E, d: unit(x.d), r: x.r, P0: x.P0, N: x.N, piece: x.piece }
   : gueule(x.E, x.d, x.r, x.C, x.a, x.Rm, x.piece));

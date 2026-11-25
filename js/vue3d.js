@@ -6,6 +6,7 @@ import { estCintre } from "./core/geometrie.js";
 import { affichageB } from "./core/sequence.js";
 import { MG030 } from "./modele_mg030.js";
 import { gueulesDuTube, reculGueule, profilGueule, radiale, descriptionGueule } from "./core/gueule.js";
+import { pointSection, reculProfil, coupesDuProfil, descriptionCoupeProfil } from "./core/profil.js";
 
 export const COULEURS = {
   droit: 0xbcc3cb, cintre: 0xffc400, cintreFait: 0x3b7dd8, enCours: 0xffc400, collision: 0xff1a1a,
@@ -125,8 +126,54 @@ function emboutGueule(g, ref, Lz, nTheta = 72, nLong = 10) {
   return new THREE.Mesh(geo, matCouleur(COULEURS.gueule, { side: THREE.DoubleSide, roughness: 0.5 }));
 }
 
+// ----------------------------------------------------------------------
+// Tubes carrés / rectangulaires droits
+/** Bande de surface extérieure d'un profil entre les abscisses (le long de l'axe, depuis le début) xA(s) et xB(s). */
+function bandeProfil(t, xA, xB, couleur, nS = 96, nL = 1) {
+  const sec = t.sec, pos = [], nor = [], idx = [];
+  for (let k = 0; k <= nS; k++) {
+    const s = (sec.P * k) / nS, q = pointSection(sec, s), a = xA(s), b = xB(s);
+    const n = add3(mul3(t.u, q.nx), mul3(t.v, q.ny)), off = add3(mul3(t.u, q.x), mul3(t.v, q.y));
+    for (let j = 0; j <= nL; j++) { const x = a + ((b - a) * j) / nL; pos.push(...add3(add3(t.debut, off), mul3(t.d, x))); nor.push(...n); }
+  }
+  const L = nL + 1;
+  for (let k = 0; k < nS; k++) for (let j = 0; j < nL; j++) { const a = k * L + j, b = a + L; idx.push(a, a + 1, b, b, a + 1, b + 1); }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute("normal", new THREE.Float32BufferAttribute(nor, 3));
+  g.setIndex(idx);
+  return new THREE.Mesh(g, matCouleur(couleur, { side: THREE.DoubleSide, metalness: 0.25, roughness: 0.45 }));
+}
+
+/** Pièce finie d'un tube carré : corps gris, coupes d'about en orange, soudure en rouge sur la face choisie. */
+function construireProfil(prog) {
+  const t = prog.tube, sec = t.sec, Lg = t.longueur, groupe = new THREE.Group();
+  const c = coupesDuProfil(t);
+  // position le long de l'axe (depuis le début) du bord de coupe à l'abscisse s : au début, recul vers +d
+  const bordDebut = (s) => (c.avant ? -reculProfil(c.avant, t, s) : 0);
+  const bordFin = (s) => Lg + (c.arriere ? reculProfil(c.arriere, t, s) : 0);
+  const prof = (g) => g ? Math.max(...Array.from({ length: 90 }, (_, k) => -reculProfil(g, t, (sec.P * k) / 90))) : 0;
+  const z0 = c.avant ? prof(c.avant) + 25 : 0, z1 = c.arriere ? prof(c.arriere) + 25 : 0;
+  groupe.add(bandeProfil(t, () => z0, () => Lg - z1, COULEURS.droit));
+  if (c.avant) groupe.add(bandeProfil(t, bordDebut, () => z0, COULEURS.gueule, 96, 8));
+  if (c.arriere) groupe.add(bandeProfil(t, () => Lg - z1, bordFin, COULEURS.gueule, 96, 8));
+  // soudure : milieu de la face choisie, d'un bord de coupe à l'autre
+  const s0 = sec.centres[t.faceSoudure - 1], q = pointSection(sec, s0);
+  const n = add3(mul3(t.u, q.nx), mul3(t.v, q.ny)), h = Math.hypot(q.x, q.y);
+  const A = add3(t.debut, mul3(t.d, bordDebut(s0))), B = add3(t.debut, mul3(t.d, bordFin(s0)));
+  groupe.add(ligneSoudure([A, B], [n, n], h));
+  const fin = t.fin, points = [t.debut, fin, add3(t.debut, mul3(t.v, sec.b)), add3(fin, mul3(t.u, sec.a))];
+  const txt = (g) => (g ? "<br>" + descriptionCoupeProfil(g, t) : "");
+  const etiquettes = [
+    { pos: t.debut, texte: "BOUT 1", type: "extremite", detail: t.nomSection + txt(c.avant) },
+    { pos: fin, texte: "BOUT 2", type: "extremite", detail: `${f1(Lg)} mm` + txt(c.arriere) },
+  ];
+  return { groupe, etiquettes, points };
+}
+
 /** Contenu « pièce finie » : renvoie {groupe, etiquettes, points}. */
 export function construirePiece(prog, { soudure = true } = {}) {
+  if (prog.profil) return construireProfil(prog);
   const groupe = new THREE.Group();
   const tube = prog.tube, r = tube.diametre / 2;
   const sim = new Simulation(prog, 6);

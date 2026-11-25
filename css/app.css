@@ -61,6 +61,10 @@ button:disabled { opacity: .45; cursor: default; }
 .liste li:last-child { border-bottom: 0; }
 .liste li:hover { background: #f6f8fa; }
 .liste li.choisi { background: #dfeaf6; }
+/* titre de section (tubes ronds, carrés…) : les sections ne se mélangent pas */
+.liste li.section-titre { display: block; min-height: 0; padding: 5px 8px; background: var(--clair); color: var(--bleu); font-weight: 700;
+  font-size: 12px; text-transform: uppercase; letter-spacing: .03em; cursor: default; border-bottom: 1px solid var(--trait); }
+.liste li.section-titre:hover { background: var(--clair); }
 .liste li.coche { box-shadow: inset 3px 0 0 var(--accent); }
 .liste .etat { text-align: center; font-weight: 700; }
 .liste .etat.erreur { color: var(--erreur); } .liste .etat.alerte { color: var(--alerte); } .liste .etat.ok { color: var(--ok); }

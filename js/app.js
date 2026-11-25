@@ -1,6 +1,7 @@
 // Application TubeCintrage (navigateur).
 import { chargerFichier, lotVersTexte, chargerLot } from "./core/importation.js";
 import { numeroter } from "./core/debit.js";
+import { programmeProfil } from "./core/profil.js";
 import { calculerAuto, Simulation } from "./core/simulation.js";
 import { ERREUR, ALERTE, affichageB, sensRotation } from "./core/sequence.js";
 import { aVerifier } from "./core/parametres.js";
@@ -69,12 +70,12 @@ function toast(t, ms = 2600) {
 
 // ----------------------------------------------------------------------
 // Calcul (avec cache)
-function cleCalcul(t) { return JSON.stringify([etat.versionParams, t.diametre, t.epaisseur, t.matiere, t.reglages.sens || 0, t.reglages.psi ?? null]); }
+function cleCalcul(t) { return JSON.stringify([etat.versionParams, t.diametre, t.epaisseur, t.matiere, t.reglages.sens || 0, t.reglages.psi ?? null, t.reglages.faceSoudure ?? null, !!t.estProfil]); }
 function programme(t) {
   const c = etat.progs.get(t.id), cle = cleCalcul(t);
   if (c && c.cle === cle) return c.prog;
   const sens = t.reglages.sens || 0;
-  const p = calculerAuto(t, etat.machine, sens === 0 ? null : sens === 2, t.reglages.psi ?? null);
+  const p = t.estProfil ? programmeProfil(t, etat.machine) : calculerAuto(t, etat.machine, sens === 0 ? null : sens === 2, t.reglages.psi ?? null);
   etat.progs.set(t.id, { cle, prog: p });
   return p;
 }
@@ -113,9 +114,20 @@ function eclater(tubes) {
   return out;
 }
 
+/** Section d'un tube : clé de rangement et titre (tubes ronds d'abord, puis carrés / rectangulaires). */
+const cleSection = (t) => t.estProfil ? `2|${t.largeur}|${t.hauteur}|${t.epaisseur}|${t.matiere}` : `1|${t.diametre}|${t.epaisseur}|${t.matiere}`;
+const titreSection = (t) => t.estProfil ? `${t.nomSection} — ${t.matiere}` : `Tube rond Ø${g(t.diametre)} × ${g(t.epaisseur)} — ${t.matiere}`;
+/** Range les tubes section par section (ordre d'apparition dans chaque famille), sans mélanger les sections. */
+function parSection(tubes) {
+  const ordre = new Map();
+  tubes.forEach((t) => { const c = cleSection(t); if (!ordre.has(c)) ordre.set(c, ordre.size); });
+  const rang = (t) => (cleSection(t)[0] === "1" ? 0 : 1e6) + ordre.get(cleSection(t));
+  return tubes.map((t, i) => ({ t, i })).sort((a, b) => rang(a.t) - rang(b.t) || a.i - b.i).map((x) => x.t);
+}
+
 function chargerTubes(tubes, { garderSelection = true } = {}) {
   const ancien = garderSelection ? etat.tubes[etat.courant] : null;
-  etat.tubes = numeroter(eclater(tubes));   // pas de regroupement : un tube = une pièce = un repère
+  etat.tubes = numeroter(parSection(eclater(tubes)));   // un tube = une pièce = un repère ; numérotation continue, section par section
   for (const t of etat.tubes) if (!t.id) t.id = idSuivant++;
   etat.coches.clear();
   let k = 0;
@@ -162,12 +174,20 @@ async function lireFichiers(fichiers, remplacer) {
 function afficherListe() {
   const ul = $("#liste");
   ul.innerHTML = "";
+  let sectionPrec = null;
   etat.tubes.forEach((t, k) => {
+    if (cleSection(t) !== sectionPrec) {   // titre de section : ronds et carrés ne se mélangent pas
+      sectionPrec = cleSection(t);
+      const n = etat.tubes.filter((x) => cleSection(x) === sectionPrec).length, h = document.createElement("li");
+      h.className = "section-titre"; h.textContent = `${titreSection(t)} · ${n} pièce${n > 1 ? "s" : ""}`;
+      ul.appendChild(h);
+    }
     const e = etatTube(t), li = document.createElement("li");
     li.className = [e || "", k === etat.courant ? "choisi" : "", etat.coches.has(k) ? "coche" : ""].join(" ");
     const nb = t.cintres.length;
     li.innerHTML = `<span class="etat ${e || ""}">${{ erreur: "✖", alerte: "⚠", surlong: "+", ok: "✔" }[e] || "…"}</span><span class="rep">${Dl.echapper(t.repere)}</span>
-      <span class="nom">${Dl.echapper(t.nom)}<small>${nb} pli${nb > 1 ? "s" : ""} · ${Math.round(t.longueur)} mm · Ø${g(t.diametre)}×${g(t.epaisseur)}${t.sources.length > 1 ? " · " + t.sources.length + " pièces regroupées" : ""}</small></span>
+      <span class="nom">${Dl.echapper(t.nom)}<small>${t.estProfil ? `droit · ${Math.round(t.longueur)} mm · ${t.nomSection}${t.gueules?.length ? " · coupe" + (t.gueules.length > 1 ? "s" : "") : ""}`
+        : `${nb} pli${nb > 1 ? "s" : ""} · ${Math.round(t.longueur)} mm · Ø${g(t.diametre)}×${g(t.epaisseur)}`}</small></span>
       <span class="qte">×${t.quantite}</span>`;
     if (t.sources.length > 1) li.title = "Pièces : " + t.sources.join(", ");
     li.onclick = (ev) => {
@@ -198,7 +218,12 @@ function selectionner(k) {
     $("#afficheur").classList.add("cache"); $("#lecteur").classList.add("cache");
     return;
   }
-  $("#qte").value = t.quantite; $("#diam").value = t.diametre; $("#ep").value = t.epaisseur; $("#mat").value = t.matiere;
+  // tube carré / rectangulaire : section fixée par la CAO, pas de sens de passage, soudure = une des 4 faces
+  const pr = !!t.estProfil;
+  ["#diam", "#ep", "#sens"].forEach((s) => ($(s).disabled = pr));
+  $("#soudRond").classList.toggle("cache", pr); $("#soudFace").classList.toggle("cache", !pr);
+  if (pr) $("#soudFace").value = String(t.faceSoudure);
+  $("#qte").value = t.quantite; $("#diam").value = pr ? "" : t.diametre; $("#ep").value = t.epaisseur; $("#mat").value = t.matiere;   // carré : section dans le résumé
   $("#sens").value = String(t.reglages.sens || 0);
   const auto = t.reglages.psi == null;
   $("#soudAuto").checked = auto; $("#soudAngle").disabled = auto;
@@ -213,9 +238,11 @@ function recalculer() {
   let p;
   try { p = programme(t); } catch (e) { console.error(e); Dl.message("Calcul", "Erreur de calcul : " + e.message); return; }
   etat.prog = p;
-  if ($("#soudAuto").checked) $("#soudAngle").value = Math.round(p.psi) % 360;
-  $("#soudVal").textContent = `${Math.round(p.psi)}°`;
-  etat.sim = new Simulation(p);
+  if (!p.profil) {
+    if ($("#soudAuto").checked) $("#soudAngle").value = Math.round(p.psi) % 360;
+    $("#soudVal").textContent = `${Math.round(p.psi)}°`;
+  }
+  etat.sim = p.profil ? null : new Simulation(p);   // tube carré : pas de cintrage, pas de simulation
   // pas deux fois plus fins que les valeurs par défaut (5° / 15° / 250 mm) : animation plus fluide
   etat.images = p.etapes.length ? etat.sim.images({ pasAngle: 2.5, pasRotation: 7.5, pasAvance: 125 }) : [];
   afficherResultats();
@@ -227,6 +254,14 @@ function afficherResultats() {
   const p = etat.prog, m = etat.machine;
   const sl = p.surlongAvant || p.surlongArriere ? `<br><span class="surlong"><b>Surlongueurs à recouper :</b> avant ${g(p.surlongAvant)} mm, arrière ${g(p.surlongArriere)} mm</span>` : "";
   $("#resume").classList.remove("discret");
+  if (p.profil) {   // tube carré / rectangulaire droit
+    const t = p.tube;
+    $("#resume").innerHTML = `<span class="debit">Débit ${f1(p.longueurDebit)} mm</span> · ${Dl.echapper(t.nomSection)} · tube droit, non cintré
+      <br>Coupes : ${t.gueules?.length ? t.gueules.length + " (orange sur la pièce, gabarits avec le bouton Gabarits)" : "droites aux deux bouts"} · soudure face ${t.faceSoudure}`;
+    $("#tableProg tbody").innerHTML = `<tr><td colspan="7" class="discret">Tube ${t.largeur === t.hauteur ? "carré" : "rectangulaire"} : pas de cintrage</td></tr>`;
+    $("#messages").innerHTML = p.messages.map((x) => `<li class="erreur">${Dl.echapper(String(x))}</li>`).join("") || `<li class="ok">Aucun problème détecté</li>`;
+    return;
+  }
   $("#resume").innerHTML = `<span class="debit">Débit ${f1(p.longueurDebit)} mm</span> · ${p.outil ? Dl.echapper(p.outil.nom) : "pas d'outil"} · ${p.etapes.length} pli(s)
     <br>Entre en premier dans la matrice : <b>${p.inverse ? "fin" : "début"} de l'esquisse</b> · soudure ${Math.round(p.psi)}° (qualité ${f1(p.scoreSoudure, 2)})${sl}`;
   const tb = $("#tableProg tbody");
@@ -319,6 +354,7 @@ $("#soudAuto").addEventListener("change", () => {
   t.reglages.psi = $("#soudAuto").checked ? null : Number($("#soudAngle").value);
   recalculer();
 });
+$("#soudFace").addEventListener("change", () => { const t = etat.tubes[etat.courant]; if (!t) return; t.reglages.faceSoudure = Number($("#soudFace").value); recalculer(); });
 $("#soudAngle").addEventListener("input", () => ($("#soudVal").textContent = `${$("#soudAngle").value}°`));
 $("#soudAngle").addEventListener("change", () => { const t = etat.tubes[etat.courant]; if (!t) return; t.reglages.psi = Number($("#soudAngle").value); recalculer(); });
 $("#btPiece").onclick = modePiece;
@@ -418,7 +454,8 @@ const actions = {
       tubes.forEach((t, k) => {
         const p = programme(t);
         for (let i = 1; i <= t.quantite; i++)
-          pieces.push({ repere: t.repere, nom: t.nom, longueur: p.longueurDebit, teinte: k, i, n: t.quantite, url: lienQr(idLot, t.repere) });
+          pieces.push({ repere: t.repere, nom: t.nom, longueur: p.longueurDebit, teinte: k, i, n: t.quantite, url: lienQr(idLot, t.repere),
+            section: t.estProfil ? t.nomSection : `Ø${g(t.diametre)} × ${g(t.epaisseur)}` });
       });
       const blob = await etiquettesPdf(pieces, { lot: etat.nomLot || "", debut });
       St.telecharger(`Etiquettes ${etat.nomLot || "lot"}.pdf`.replace(/[\\/:*?"<>|]+/g, "_"), blob, "application/pdf");

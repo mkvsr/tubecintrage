@@ -6,8 +6,9 @@ import { aVerifier } from "./core/parametres.js";
 import { imagePiece, imageEtat } from "./vue3d.js";
 import { gueulesDuTube, profilGueule, descriptionGueule } from "./core/gueule.js";
 import { qrMatrice } from "./qrcode.js";
+import { coupesDuProfil, profilCoupeProfil, descriptionCoupeProfil } from "./core/profil.js";
 
-const BLEU = "#1f3b57", GRIS = "#5d6d7e", CLAIR = "#eef2f6", ROUGE = "#b03a2e", JAUNE_TXT = "#9a6a00", TRAIT = "#c5ced8";
+const BLEU = "#1f3b57", BLEU2 = "#2c5378", GRIS = "#5d6d7e", CLAIR = "#eef2f6", ROUGE = "#b03a2e", JAUNE_TXT = "#9a6a00", TRAIT = "#c5ced8";
 const JAUNE = "#f2c14e", ROUGE_B = "#d62728", ROSE = "#d6338a";
 const L = 210, H = 297, MG = 15, LU = L - 2 * MG;
 const QR_TAILLE = 24, QR_Y = MG + 2;   // QR code d'accès à la simulation : page 1, en haut à droite, à côté du bandeau (mm)
@@ -190,16 +191,22 @@ function afficheur(D, x, y, lettre, valeur, couleurCadre, { h = 11.5, nb = 6 } =
 }
 
 // ----------------------------------------------------------------------
+/** Section d'un tube : libellé court (colonne), libellé complet (titre) et clé (ronds d'abord, puis carrés). */
+const sectionCourte = (t) => t.estProfil ? `${f1(t.largeur)} × ${f1(t.hauteur)} × ${f1(t.epaisseur)}` : `Ø${f1(t.diametre)} × ${f1(t.epaisseur)}`;
+const sectionTitre = (t) => t.estProfil ? `${t.nomSection} — ${t.matiere}` : `Tube rond Ø${f1(t.diametre)} × ${f1(t.epaisseur)} — ${t.matiere}`;
+const sectionCle = (t) => t.estProfil ? `2|${t.largeur}|${t.hauteur}|${t.epaisseur}|${t.matiere}` : `1|${Math.round(t.diametre * 10) / 10}|${Math.round(t.epaisseur * 100) / 100}|${t.matiere}`;
+
 function sections(progs) {
   const sec = new Map();
   for (const p of progs) {
     const t = p.tubeCao;
     if (t.quantite <= 0) continue;
-    const cle = `${Math.round(t.diametre * 10) / 10}|${Math.round(t.epaisseur * 100) / 100}|${t.matiere}`;
-    if (!sec.has(cle)) sec.set(cle, { D: t.diametre, ep: t.epaisseur, mat: t.matiere, pieces: [] });
+    const cle = sectionCle(t);
+    if (!sec.has(cle)) sec.set(cle, { cle, titre: sectionTitre(t), court: sectionCourte(t), pieces: [], progs: [] });
     sec.get(cle).pieces.push({ repere: rep(t), longueur: Math.ceil(p.longueurDebit), quantite: t.quantite });
+    sec.get(cle).progs.push(p);
   }
-  return [...sec.values()];
+  return [...sec.values()].sort((a, b) => a.cle[0] - b.cle[0]);
 }
 
 const TEINTES = ["#cfe0f3", "#f6dcc0", "#d6ecd2", "#e6dcf3", "#f3e7b8", "#d4e9ec"];
@@ -277,29 +284,34 @@ function pageDebit(D, progs, titreLot) {
     `${progs.length} repère(s), ${nP} pièce(s) · barres de ${g(m.barre_longueur)} mm · trait de scie ${g(m.trait_scie)} mm · édité le ${dateFr()}`);
   const couleurs = new Map();
   progs.forEach((p, k) => couleurs.set(rep(p.tubeCao), TEINTES[k % TEINTES.length]));
-  D.tableau([
-    { t: "Repère", w: 17, gras: true }, { t: "Désignation", w: 62, align: "left", retour: true, taille: 8.5 },
-    { t: "Qté", w: 11 }, { t: "Ø × ép.", w: 24 }, { t: "Matière", w: 24, retour: true, taille: 8.5 },
-    { t: "Débit (mm)", w: 20, gras: true }, { t: "Plis", w: 11 }, { t: "", w: 11, couleur: ROUGE },
-  ], progs.map((p) => {
-    const t = p.tubeCao;
-    return [{ t: rep(t), fond: couleurs.get(rep(t)), gras: true }, { t: t.nom, sous: t.sources.length > 1 ? t.sources.join(", ") : null },
-      String(t.quantite), `${f1(t.diametre)} × ${f1(t.epaisseur)}`, t.matiere, f1(p.longueurDebit), String(p.etapes.length),
-      etatDebit(p)];
-  }), { taille: 8.5 });
-  D.y += 3;
+  // une section après l'autre (ronds, puis carrés / rectangulaires) : liste des pièces, puis son plan de coupe
   for (const s of sections(progs)) {
+    D.besoin(30);
+    D.rect(MG, D.y, LU, 7.5, BLEU2);
+    D.police(10.5, true, "#ffffff"); D.texte(`${s.titre} · ${s.pieces.reduce((a, x) => a + x.quantite, 0)} pièce(s)`, MG + 3, D.y + 5.1);
+    D.y += 9.5;
+    D.tableau([
+      { t: "Repère", w: 17, gras: true }, { t: "Désignation", w: 62, align: "left", retour: true, taille: 8.5 },
+      { t: "Qté", w: 11 }, { t: "Section", w: 26 }, { t: "Matière", w: 22, retour: true, taille: 8.5 },
+      { t: "Débit (mm)", w: 20, gras: true }, { t: "Plis", w: 11 }, { t: "", w: 11, couleur: ROUGE },
+    ], s.progs.map((p) => {
+      const t = p.tubeCao;
+      return [{ t: rep(t), fond: couleurs.get(rep(t)), gras: true }, { t: t.nom, sous: t.sources.length > 1 ? t.sources.join(", ") : null },
+        String(t.quantite), sectionCourte(t), t.matiere, f1(p.longueurDebit), t.estProfil ? "—" : String(p.etapes.length), etatDebit(p)];
+    }), { taille: 8.5 });
+    D.y += 3;
     const { barres, tropLongues } = planDeCoupe(s.pieces, m.barre_longueur, m.trait_scie);
     const utile = s.pieces.filter((p) => p.longueur <= m.barre_longueur).reduce((a, p) => a + p.longueur * p.quantite, 0);
     const total = barres.length * m.barre_longueur, chute = barres.reduce((a, b) => a + b.chute, 0);
     const reut = barres.filter((b) => b.chute >= m.chute_reutilisable);
-    D.titre2(`Plan de coupe Ø${f1(s.D)} × ${f1(s.ep)} — ${s.mat} : ${barres.length} barre(s)`);
+    D.titre2(`Plan de coupe ${s.court} : ${barres.length} barre(s)`);
     D.police(8.5, false, "#000000");
     D.texte(`Tube utile ${f1(utile / 1000, 2)} m sur ${f1(total / 1000, 2)} m (utilisation ${f1(total ? 100 * utile / total : 0, 1)} %) · chutes ${f1(chute / 1000, 2)} m`
       + (reut.length ? `, dont ${reut.length} réutilisable(s) ≥ ${g(m.chute_reutilisable)} mm` : ""), MG, D.y + 2);
     D.y += 4;
     dessinerPlan(D, m, barres, couleurs);
     for (const p of tropLongues) { D.police(8.5, false, ROUGE); D.texte(`✖ ${p.repere} : ${g(p.longueur)} mm plus long qu'une barre`, MG, D.y + 3); D.y += 5; }
+    D.y += 4;
   }
   const av = aVerifier(m);
   if (av.length) {
@@ -309,7 +321,44 @@ function pageDebit(D, progs, titreLot) {
 }
 
 // ----------------------------------------------------------------------
+/** Fiche d'un tube carré / rectangulaire : débit, section, coupes d'about, image ; pas de cintrage. */
+function ficheProfil(D, prog) {
+  const t = prog.tubeCao, c = coupesDuProfil(t);
+  D.entete(t.repere ? `${t.repere} — ${t.nom}` : t.nom, `Quantité : ${t.quantite}  ·  ${t.nomSection} mm  ·  ${t.matiere}  ·  tube droit, non cintré  ·  édité le ${dateFr()}`);
+  const y0 = D.y, hI = 17;
+  D.rect(MG, y0, LU, hI, CLAIR, GRIS, 0.3);
+  D.police(8, false, GRIS); D.texte("Longueur de débit", MG + 3, y0 + 5);
+  D.police(20, true, BLEU); D.texte(`${f1(prog.longueurDebit)} mm`, MG + 3, y0 + 13.5);
+  D.police(8, false, GRIS); D.texte("Section", MG + 70, y0 + 5);
+  D.police(11, true); D.texte(t.nomSection, MG + 70, y0 + 12);
+  D.police(8, false, GRIS); D.texte("Soudure", MG + 135, y0 + 5);
+  D.police(11, true); D.texte(`face ${t.faceSoudure}`, MG + 135, y0 + 12);
+  D.y = y0 + hI + 3;
+  const wImg = 96, hImg = 66;
+  D.d.addImage(imagePiece(prog, 1100, Math.round(1100 * hImg / wImg)), "JPEG", MG, D.y, wImg, hImg);
+  D.rect(MG, D.y, wImg, hImg, null, TRAIT, 0.25);
+  const xP = MG + wImg + 5, wP = LU - wImg - 5;
+  D.police(10, true, BLEU); D.texte("Préparation", xP, D.y + 3.5);
+  const prep = [`Couper le tube à ${f1(prog.longueurDebit)} mm${t.gueules?.length ? " (longueur pointe à pointe)" : ""}.`,
+    `Repérer la face ${t.faceSoudure} (face de la soudure) au feutre.`];
+  if (c.avant) prep.push(`Bout 1 : ${descriptionCoupeProfil(c.avant, t)} — gabarit à l'échelle 1 dans ce dossier.`);
+  if (c.arriere) prep.push(`Bout 2 : ${descriptionCoupeProfil(c.arriere, t)} — gabarit à l'échelle 1 dans ce dossier.`);
+  if (!t.gueules?.length) prep.push("Coupes droites aux deux bouts.");
+  prep.push("Pas de cintrage (pas d'outillage pour les tubes carrés).");
+  let yp = D.y + 8;
+  prep.forEach((p, k) => {
+    D.d.setFillColor(BLEU); D.d.circle(xP + 2, yp + 1.6, 2, "F");
+    D.police(7, true, "#ffffff"); D.texte(String(k + 1), xP + 2, yp + 2.5, { align: "center" });
+    yp += D.para(p, xP + 5.5, yp, wP - 5.5, 8, false, "#1b2631", 1.25) + 1.6;
+  });
+  D.y += hImg + 1.5;
+  D.police(6.8, false, GRIS); D.texte("Gris : tube · orange : coupes d'about à faire · trait rouge : soudure", MG, D.y + 2.5);
+  D.y += 5;
+  for (const x of prog.messages) { D.besoin(5); D.y += D.para("✖ " + String(x), MG, D.y, LU, 8.5, false, ROUGE) + 1; }
+}
+
 function ficheTube(D, prog, remarquesMachine) {
+  if (prog.profil) return ficheProfil(D, prog);
   const m = prog.machine, t = prog.tubeCao;
   const titre = t.repere ? `${t.repere} — ${t.nom}` : `Fiche de cintrage — ${t.nom}`;
   D.entete(titre, `Quantité : ${t.quantite}  ·  Ø${f1(t.diametre)} × ${f1(t.epaisseur)} mm  ·  ${t.matiere}  ·  ${m.nom}  ·  édité le ${dateFr()}`,
@@ -474,7 +523,46 @@ export async function dossierPdf(progs, { titreLot = "", progression = null, lie
  *  trait de coupe en haut, bande de 50 mm en dessous pour l'enrouler, repère de la soudure au milieu.
  *  Gauche → droite = sens antihoraire vu depuis le bout du tube (gabarit enroulé face imprimée vers l'extérieur,
  *  trait de coupe vers le bout). */
+/** Gabarits d'un tube carré : développé du périmètre extérieur (P = 2(l + h) − (8 − 2π)·rc), soudure au milieu,
+ *  plis d'angle en pointillé. Gauche → droite = sens antihoraire vu depuis le bout, comme pour les ronds. */
+function gabaritsProfil(D, prog, seul) {
+  const t = prog.tubeCao, sec = t.sec, c = coupesDuProfil(t), W = sec.P, BANDE = 50;
+  const bouts = [["1", c.avant], ["2", c.arriere]].filter((b) => b[1]);
+  if (!bouts.length) return;
+  if (seul) { D.nouvellePage(); D.entete(`Gabarits de coupe — ${t.repere ? t.repere + " · " : ""}${t.nom}`, MODE_EMPLOI_GABARIT[0], MODE_EMPLOI_GABARIT[1]); }
+  else { D.besoin(14 + BANDE); D.titre2(`${t.repere ? t.repere + " — " : ""}${t.nom} · ${t.nomSection}`); }
+  if (W > L - 10) { D.para(`${t.nomSection} : développé de ${f1(W)} mm, plus large que la page A4 — gabarit non imprimable.`, MG, D.y, LU, 9, true, ROUGE); return; }
+  const s0 = sec.centres[t.faceSoudure - 1];
+  for (const [num, g0] of bouts) {
+    const prof = profilCoupeProfil(g0, t, 720), sens = g0.auDebut ? -1 : 1;
+    const tmax = Math.max(...prof.map((p) => p.recul)), tmin = Math.min(...prof.map((p) => p.recul)), H = tmax - tmin + BANDE;
+    D.besoin(H + 16);
+    D.police(10, true, BLEU); D.texte(`Bout ${num}`, MG, D.y + 4);
+    D.police(8.5, false, GRIS); D.texte(`— ${descriptionCoupeProfil(g0, t)}`, MG + 16, D.y + 4, { maxWidth: LU - 16 });
+    const x0 = (L - W) / 2, y0 = D.y + 9, yb = y0 + H, X = (s) => x0 + s + W / 2, Y = (r) => y0 + (tmax - r);
+    D.d.setDrawColor("#000000"); D.d.setLineWidth(0.5); D.d.setLineDash([]);
+    for (let k = 1; k < prof.length; k++) D.d.line(X(prof[k - 1].s), Y(prof[k - 1].recul), X(prof[k].s), Y(prof[k].recul));
+    D.d.line(X(W / 2), Y(prof[prof.length - 1].recul), X(W / 2), yb); D.d.line(X(W / 2), yb, X(-W / 2), yb); D.d.line(X(-W / 2), yb, X(-W / 2), Y(prof[0].recul));
+    const rel = (s) => { const r = sens * (s - s0); return ((r + W / 2) % W + W) % W - W / 2; };   // position sur le gabarit
+    const reculA = (x) => prof[Math.round(((x + W / 2) / W) * (prof.length - 1))].recul;
+    // plis d'angle (pointillés gris) et numéros de faces
+    D.d.setDrawColor(GRIS); D.d.setLineWidth(0.2); D.d.setLineDash([1.2, 1.2]);
+    for (const a of sec.angles) { const x = rel(a); D.d.line(X(x), Y(reculA(x)) + 1.5, X(x), yb - 1.5); }
+    D.d.setLineDash([]);
+    D.police(7, false, GRIS);
+    sec.centres.forEach((cf, k) => { const x = rel(cf); if (k !== t.faceSoudure - 1) D.texte(`face ${k + 1}`, X(x), yb - 3, { align: "center" }); });
+    // soudure : au milieu (face choisie)
+    D.d.setDrawColor(ROUGE_B); D.d.setLineWidth(0.5); D.d.setLineDash([2.5, 1.5]);
+    D.d.line(X(0), Y(reculA(0)) + 1.5, X(0), yb - 1); D.d.setLineDash([]);
+    D.police(9, true, ROUGE_B); D.texte(`SOUDURE (face ${t.faceSoudure})`, X(0), yb - 3, { align: "center" });
+    D.police(7.5, false, GRIS); D.texte(`↑ bout ${num} du tube ↑ · ${t.repere || t.nom} · ${sectionCourte(t)}`, X(0), yb - 10, { align: "center" });
+    D.y = yb + 6;
+  }
+  if (seul) controleEchelle(D);
+}
+
 function pageGabarits(D, prog, { seul = true } = {}) {
+  if (prog.profil) return gabaritsProfil(D, prog, seul);
   const t = prog.tubeCao, gq = gueulesDuTube(prog.tube);
   const bouts = [["AVANT", "entre en premier dans la machine", gq.avant, true], ["ARRIÈRE", "côté pince du chariot", gq.arriere, false]]
     .filter((b) => b[2]);
@@ -532,7 +620,7 @@ const MODE_EMPLOI_GABARIT = [
 
 /** Export séparé : uniquement les gabarits de gueule de loup du lot, à imprimer. */
 export async function gabaritsPdf(progs, { titreLot = "" } = {}) {
-  const avec = progs.filter((p) => { const g = gueulesDuTube(p.tube); return g.avant || g.arriere; });
+  const avec = progs.filter((p) => { if (p.profil) return p.tube.gueules?.length; const g = gueulesDuTube(p.tube); return g.avant || g.arriere; });
   const D = new Doc(window.jspdf.jsPDF, await polices());
   D.sansQr = true;   // pas de QR code : bandeau de la page 1 sur toute la largeur
   D.d.setProperties({ title: "Gabarits de gueule de loup" + (titreLot ? " — " + titreLot : ""), creator: "TubeCintrage" });
@@ -609,7 +697,8 @@ export async function etiquettesPdf(pieces, { lot = "", debut = 1 } = {}) {
     d.setFillColor(TEINTES[p.teinte % TEINTES.length]); d.setDrawColor("#4a6b8a"); d.setLineWidth(0.3);
     d.roundedRect(x0, ey + 3.2, wr, 9, 1.2, 1.2, "FD");
     d.text(p.repere, x0 + 2, ey + 10.3);
-    if (p.n > 1) { police(6.5, false, GRIS); d.text(`pièce ${p.i}/${p.n}`, ex + ETQ.l - 2.5, ey + 6.2, { align: "right" }); }
+    police(6.5, true, GRIS); d.text(p.section || "", ex + ETQ.l - 2.5, ey + 6.2, { align: "right" });   // section : ne pas mélanger les barres
+    if (p.n > 1) { police(6.5, false, GRIS); d.text(`pièce ${p.i}/${p.n}`, ex + ETQ.l - 2.5, ey + 9.4, { align: "right" }); }
     police(8.5, true, "#000000");
     d.splitTextToSize(p.nom || "", wt).slice(0, 2).forEach((l, k) => d.text(l, x0, ey + 16.6 + k * 3.5));
     police(13, true, BLEU); d.text(`${f1(p.longueur)} mm`, x0, ey + 26.6);
@@ -621,11 +710,11 @@ export async function etiquettesPdf(pieces, { lot = "", debut = 1 } = {}) {
 /** Liste de débit CSV (séparateur ;, UTF-8 avec BOM pour Excel). */
 export function debitCsv(progs) {
   const q = (v) => { const s = String(v ?? ""); return /[;"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
-  const lignes = [["Repère", "Désignation", "Pièces d'origine", "Quantité", "Diamètre", "Épaisseur", "Matière",
+  const lignes = [["Repère", "Désignation", "Pièces d'origine", "Quantité", "Section", "Diamètre", "Épaisseur", "Matière",
     "Longueur débit (mm)", "Surlongueur avant", "Surlongueur arrière", "Nombre de plis", "Outil", "Erreurs"]];
   for (const p of progs) {
     const t = p.tubeCao;
-    lignes.push([rep(t), t.nom, t.sources.join(", "), t.quantite, f1(t.diametre, 2), f1(t.epaisseur, 2), t.matiere,
+    lignes.push([rep(t), t.nom, t.sources.join(", "), t.quantite, sectionCourte(t), t.estProfil ? "" : f1(t.diametre, 2), f1(t.epaisseur, 2), t.matiere,
       f1(p.longueurDebit), f1(p.surlongAvant), f1(p.surlongArriere), p.etapes.length, p.outil ? p.outil.nom : "",
       p.erreurs.map(String).join(" | ")]);
   }
@@ -634,7 +723,7 @@ export function debitCsv(progs) {
     lignes.push([], ["Plan de coupe", `barres ${g(m.barre_longueur)} mm`, `trait ${g(m.trait_scie)} mm`]);
     for (const s of sections(progs)) {
       const { barres, tropLongues } = planDeCoupe(s.pieces, m.barre_longueur, m.trait_scie);
-      lignes.push([`Ø${f1(s.D)} × ${f1(s.ep)} ${s.mat}`, `${barres.length} barre(s)`]);
+      lignes.push([s.titre, `${barres.length} barre(s)`]);
       barres.forEach((b, k) => lignes.push([`Barre ${k + 1}`, b.coupes.map((c) => `${c.repere} ${g(c.longueur)}`).join(" + "), `chute ${f1(b.chute, 0)}`]));
       for (const p of tropLongues) lignes.push([p.repere, `${g(p.longueur)} mm`, "plus long qu'une barre"]);
     }

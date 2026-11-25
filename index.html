@@ -74,8 +74,12 @@
             <option value="2">Fin de l'esquisse en premier</option>
           </select></label>
         <label class="large">Soudure
-          <span class="soudure"><label class="case"><input type="checkbox" id="soudAuto" checked> automatique</label>
-            <input type="range" id="soudAngle" min="0" max="359" step="1" disabled><output id="soudVal">—</output></span></label>
+          <span class="soudure" id="soudRond"><label class="case"><input type="checkbox" id="soudAuto" checked> automatique</label>
+            <input type="range" id="soudAngle" min="0" max="359" step="1" disabled><output id="soudVal">—</output></span>
+          <select id="soudFace" class="cache" title="Face du tube carré qui porte la soudure (repère SOUDURE des gabarits)">
+            <option value="1">Face 1 (dessus dans la CAO)</option><option value="2">Face 2</option>
+            <option value="3">Face 3 (dessous dans la CAO)</option><option value="4">Face 4</option>
+          </select></label>
       </div>
     </div>
 
