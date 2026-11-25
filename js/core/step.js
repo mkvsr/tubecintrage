@@ -323,9 +323,10 @@ export function analyserMaillage(mesh) {
     if (c) cyls.push(c); else restes.push(f);
   }
   const rayonsConnus = [...new Set(cyls.map((c) => Math.round(c.rayon * 100) / 100))];
+  const nonReconnues = [];
   for (const f of restes) {
     const t = ajusterTore(f.P, f.N, rayonsConnus);
-    if (t) tors.push(t); else autres++;
+    if (t) tors.push(t); else { autres++; nonReconnues.push(f); }
   }
   if (!cyls.length && !tors.length) return null;
   // regroupe les rayons proches
@@ -339,8 +340,53 @@ export function analyserMaillage(mesh) {
   if (ignores.length) rem.push("faces cylindriques d'autres rayons ignorées : " + ignores.map((r) => `R${r.toFixed(2)}`).join(", "));
   const garde = (f) => tubeR.some((r) => Math.abs(f.rayon - r) < 0.05);
   const segs = [...fusionDroites(cyls.filter(garde)), ...fusionArcs(tors.filter(garde))];
+  const plis = plisManquants(segs, nonReconnues, rExt, tors.filter(garde).map((t) => t.R));
+  if (plis.length) { segs.push(...plis); rem.push(`${plis.length} petit(s) pli(s) reconstruit(s) d'après les droites voisines (${plis.map((p) => fmt(p.angleDeg) + "°").join(", ")})`); }
   return { segs, diametre: 2 * rExt, epaisseur: rInt != null ? rExt - rInt : null, rem, autres };
 }
+
+/** Petits plis non reconnus : sur quelques degrés, l'arc du cercle de pli est presque droit et l'ajustement du tore
+ *  échoue. Quand deux droites du tube se suivent, coplanaires, avec des longueurs tangentes égales, un rayon cohérent
+ *  avec les autres plis et des faces non reconnues entre elles, on reconstruit l'arc tangent aux deux droites. */
+function plisManquants(segs, faces, r, rayonsPli) {
+  if (!faces.length) return [];
+  const pts = faces.flatMap((f) => f.P);
+  const lignes = segs.filter((s) => s.type === "ligne");
+  const arcs = segs.filter((s) => s.type === "arc");
+  const raccorde = (E) => arcs.some((s) => norm(sub(s.p0, E)) < 0.5 || norm(sub(s.p1, E)) < 0.5);
+  const bouts = [];
+  lignes.forEach((s, i) => {
+    const d = unit(sub(s.p1, s.p0));
+    if (!raccorde(s.p1)) bouts.push({ E: s.p1, u: d, i });        // u : direction sortante du bout
+    if (!raccorde(s.p0)) bouts.push({ E: s.p0, u: neg(d), i });
+  });
+  const res = [], pris = new Set();
+  for (let a = 0; a < bouts.length; a++) for (let b = a + 1; b < bouts.length; b++) {
+    const A = bouts[a], B = bouts[b];
+    if (A.i === B.i || pris.has(a) || pris.has(b)) continue;
+    const ent = neg(B.u);                                         // direction d'entrée dans la droite B
+    const theta = angleEntre(A.u, ent);
+    if (theta < 0.5 * RAD_ || theta > 60 * RAD_) continue;        // aligné (coupe) ou grand pli (déjà reconnu)
+    // points des deux tangentes les plus proches : ils doivent coïncider (droites coplanaires), à égale distance
+    const w0 = sub(A.E, B.E), aa = dot(A.u, A.u), bb = dot(A.u, B.u), cc = dot(B.u, B.u), dd = dot(A.u, w0), ee = dot(B.u, w0);
+    const den = aa * cc - bb * bb; if (Math.abs(den) < 1e-12) continue;
+    const s = (bb * ee - cc * dd) / den, t = (aa * ee - bb * dd) / den;
+    if (s <= 0 || t <= 0 || Math.abs(s - t) > 0.5) continue;
+    if (norm(sub(add(A.E, mul(A.u, s)), add(B.E, mul(B.u, t)))) > 0.5) continue;
+    const R = ((s + t) / 2) / Math.tan(theta / 2);
+    if (R < 1.5 * r) continue;
+    if (rayonsPli.length && !rayonsPli.some((k) => Math.abs(R - k) < 0.02 * k + 0.5)) continue;
+    const w = unit(sub(ent, mul(A.u, dot(ent, A.u)))), c = add(A.E, mul(w, R));
+    if (Math.abs(norm(sub(B.E, c)) - R) > 0.5) continue;
+    // une face non reconnue doit se trouver sur ce pli (sinon ce sont deux tubes distincts)
+    const M = add(c, mul(unit(sub(add(A.E, B.E), mul(c, 2))), R));
+    if (!pts.some((p) => norm(sub(p, M)) < r + 2)) continue;
+    res.push({ type: "arc", p0: A.E, p1: B.E, centre: c, normale: unit(cross(sub(A.E, c), sub(B.E, c))), rayon: R, angleDeg: theta / RAD_ });
+    pris.add(a); pris.add(b);
+  }
+  return res;
+}
+const RAD_ = Math.PI / 180;
 
 const longueurSeg = (s) => (s.type === "ligne" ? norm(sub(s.p1, s.p0)) : (norm(sub(s.p1, s.p0)) || s.rayon));
 
