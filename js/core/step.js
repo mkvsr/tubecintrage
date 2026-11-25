@@ -326,7 +326,7 @@ export function analyserMaillage(mesh) {
   const nonReconnues = [];
   for (const f of restes) {
     const t = ajusterTore(f.P, f.N, rayonsConnus);
-    if (t) tors.push(t); else { autres++; nonReconnues.push(f); }
+    if (t) { t.P = f.P; tors.push(t); } else { autres++; nonReconnues.push(f); }
   }
   if (!cyls.length && !tors.length) return null;
   // regroupe les rayons proches
@@ -339,9 +339,16 @@ export function analyserMaillage(mesh) {
   const ignores = rayons.filter((r) => !tubeR.some((x) => Math.abs(x - r) < 0.05));
   if (ignores.length) rem.push("faces cylindriques d'autres rayons ignorées : " + ignores.map((r) => `R${r.toFixed(2)}`).join(", "));
   const garde = (f) => tubeR.some((r) => Math.abs(f.rayon - r) < 0.05);
-  const segs = [...fusionDroites(cyls.filter(garde)), ...fusionArcs(tors.filter(garde))];
-  const plis = plisManquants(segs, nonReconnues, rExt, tors.filter(garde).map((t) => t.R));
+  // Plis de moins de 20° : l'arc est trop court pour un ajustement fiable du tore (ex. 12,27° / R142,2 au lieu de
+  // 12° / R145) ; on les reconstruit d'abord d'après les droites voisines (exact), le tore ajusté ne sert qu'en secours.
+  const petit = (t) => t.angle < PETIT_PLI;
+  const grands = tors.filter((t) => garde(t) && !petit(t)), petits = tors.filter((t) => garde(t) && petit(t));
+  const segs = [...fusionDroites(cyls.filter(garde)), ...fusionArcs(grands)];
+  const plis = plisManquants(segs, [...nonReconnues, ...petits], rExt, grands.map((t) => t.R));
   if (plis.length) { segs.push(...plis); rem.push(`${plis.length} petit(s) pli(s) reconstruit(s) d'après les droites voisines (${plis.map((p) => fmt(p.angleDeg) + "°").join(", ")})`); }
+  const milieu = (c, R, p0, p1) => add(c, mul(unit(add(sub(p0, c), sub(p1, c))), R));
+  const secours = petits.filter((t) => !plis.some((p) => norm(sub(milieu(p.centre, p.rayon, p.p0, p.p1), milieu(t.centre, t.R, t.p0, t.p1))) < rExt + 2));
+  segs.push(...fusionArcs(secours));
   return { segs, diametre: 2 * rExt, epaisseur: rInt != null ? rExt - rInt : null, rem, autres };
 }
 
@@ -387,6 +394,7 @@ function plisManquants(segs, faces, r, rayonsPli) {
   return res;
 }
 const RAD_ = Math.PI / 180;
+const PETIT_PLI = 20 * RAD_;   // en dessous, pli reconstruit d'après les droites voisines plutôt qu'ajusté
 
 const longueurSeg = (s) => (s.type === "ligne" ? norm(sub(s.p1, s.p0)) : (norm(sub(s.p1, s.p0)) || s.rayon));
 
