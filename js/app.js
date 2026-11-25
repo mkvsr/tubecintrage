@@ -1,6 +1,6 @@
 // Application TubeCintrage (navigateur).
 import { chargerFichier, lotVersTexte, chargerLot } from "./core/importation.js";
-import { regrouper, numeroter } from "./core/debit.js";
+import { numeroter } from "./core/debit.js";
 import { calculerAuto, Simulation } from "./core/simulation.js";
 import { ERREUR, ALERTE, affichageB, sensRotation } from "./core/sequence.js";
 import { aVerifier } from "./core/parametres.js";
@@ -97,9 +97,25 @@ async function calculerTous() {
 
 // ----------------------------------------------------------------------
 // Lot
+/** Un tube = une pièce = un repère (T01, T02…) : l'opérateur repère chaque pièce par son numéro et son étiquette.
+ *  Pas de regroupement des tubes de même forme ; une quantité > 1 (saisie, ou ancien lot regroupé) est éclatée en
+ *  pièces séparées, nommées d'après les pièces d'origine quand on les connaît. */
+function eclater(tubes) {
+  const out = [];
+  for (const t of tubes) {
+    const q = Math.round(t.quantite ?? 1);
+    if (q <= 1) { out.push(t); continue; }
+    for (let i = 0; i < q; i++) {
+      const nom = t.sources[i] || (i === 0 ? t.nom : `${t.nom} (${i + 1})`);
+      out.push(t.copie({ quantite: 1, nom, sources: [nom] }));
+    }
+  }
+  return out;
+}
+
 function chargerTubes(tubes, { garderSelection = true } = {}) {
   const ancien = garderSelection ? etat.tubes[etat.courant] : null;
-  etat.tubes = numeroter(regrouper(tubes));
+  etat.tubes = numeroter(eclater(tubes));   // pas de regroupement : un tube = une pièce = un repère
   for (const t of etat.tubes) if (!t.id) t.id = idSuivant++;
   etat.coches.clear();
   let k = 0;
@@ -285,7 +301,9 @@ function lecture() {
 // Événements des réglages
 $("#qte").addEventListener("change", () => {
   const t = etat.tubes[etat.courant]; if (!t) return;
-  t.quantite = Math.max(0, Math.round(Dl.nombre($("#qte").value, t.quantite))); $("#qte").value = t.quantite; afficherListe();
+  t.quantite = Math.max(0, Math.round(Dl.nombre($("#qte").value, t.quantite))); $("#qte").value = t.quantite;
+  if (t.quantite > 1) { chargerTubes(etat.tubes); toast(`${t.quantite} pièces séparées, chacune avec son repère`, 3000); }   // éclatée
+  else afficherListe();
 });
 for (const id of ["#diam", "#ep"]) $(id).addEventListener("change", () => {
   const t = etat.tubes[etat.courant]; if (!t) return;
